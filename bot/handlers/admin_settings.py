@@ -1,6 +1,7 @@
 """Інтерактивне меню /settings у групі адмінів."""
 
 from contextlib import suppress
+from dataclasses import dataclass
 from html import escape
 from urllib.parse import urlparse
 
@@ -8,9 +9,7 @@ from aiogram import Bot, F, Router
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
 from aiogram.filters.callback_data import CallbackData
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
+from aiogram.types import CallbackQuery, ForceReply, InlineKeyboardMarkup, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.db import Database
@@ -23,8 +22,13 @@ class SettingsCb(CallbackData, prefix="st"):
     section: str = ""
 
 
-class SettingsInput(StatesGroup):
-    meet_url = State()
+@dataclass
+class PendingInput:
+    """Бот чекає від адміна посилання у відповідь на повідомлення-запит."""
+
+    settings_msg_id: int
+    prompt_msg_id: int
+    user_id: int
 
 
 # --- Екрани ------------------------------------------------------------------
@@ -61,13 +65,10 @@ async def _section_screen(db: Database, key: str, note: str = "") -> tuple[str, 
     return text, kb.as_markup()
 
 
-def _url_prompt_screen(error: str = "") -> tuple[str, InlineKeyboardMarkup]:
+def _waiting_screen() -> tuple[str, InlineKeyboardMarkup]:
     kb = InlineKeyboardBuilder()
     kb.button(text="⬅️ Назад", callback_data=SettingsCb(action="cancel_input", section="meet"))
-    text = "✏️ Надішліть повідомлення з посиланням на Google Form."
-    if error:
-        text = f"⚠️ {error}\n\n{text}"
-    return text, kb.as_markup()
+    return "⚙️ <b>🤝 Давай знайомитись</b>\n\n✏️ Очікую нове посилання на форму…", kb.as_markup()
 
 
 async def _edit(bot: Bot, chat_id: int, message_id: int, screen: tuple[str, InlineKeyboardMarkup]) -> None:
@@ -93,49 +94,79 @@ def create_router(admin_chat_id: int) -> Router:
     router.message.filter(F.chat.id == admin_chat_id)
     router.callback_query.filter(F.message.chat.id == admin_chat_id)
 
+    # Очікуване введення (на чат). Приймаємо відповідь (reply) на запит — такі повідомлення
+    # доходять до бота навіть з увімкненим privacy mode і від анонімних адмінів.
+    pending: dict[int, PendingInput] = {}
+
+    async def drop_pending(bot: Bot, chat_id: int) -> PendingInput | None:
+        p = pending.pop(chat_id, None)
+        if p:
+            with suppress(TelegramBadRequest):
+                await bot.delete_message(chat_id, p.prompt_msg_id)
+        return p
+
+    async def ask_url(bot: Bot, chat_id: int, settings_msg_id: int, user_id: int, error: str = "") -> None:
+        text = "✏️ Надішліть у відповідь на це повідомлення посилання на Google Form."
+        if error:
+            text = f"⚠️ {error}\n\n{text}"
+        prompt = await bot.send_message(
+            chat_id, text,
+            reply_markup=ForceReply(input_field_placeholder="https://forms.gle/..."),
+        )
+        pending[chat_id] = PendingInput(settings_msg_id, prompt.message_id, user_id)
+
+    def is_pending_input(message: Message) -> bool:
+        p = pending.get(message.chat.id)
+        if not p:
+            return False
+        reply = message.reply_to_message
+        return (reply is not None and reply.message_id == p.prompt_msg_id) or (
+            message.from_user is not None and message.from_user.id == p.user_id
+        )
+
     @router.message(Command("settings"))
-    async def cmd_settings(message: Message, state: FSMContext) -> None:
-        await state.clear()
+    async def cmd_settings(message: Message) -> None:
+        await drop_pending(message.bot, message.chat.id)
         text, markup = _list_screen()
         await message.answer(text, reply_markup=markup)
 
     @router.callback_query(SettingsCb.filter(F.action == "list"))
-    async def on_list(callback: CallbackQuery, state: FSMContext) -> None:
+    async def on_list(callback: CallbackQuery) -> None:
         await callback.answer()
-        await state.clear()
         await _edit(callback.bot, callback.message.chat.id, callback.message.message_id, _list_screen())
 
     @router.callback_query(SettingsCb.filter(F.action.in_({"open", "cancel_input"})))
-    async def on_open(callback: CallbackQuery, callback_data: SettingsCb, state: FSMContext, db: Database) -> None:
+    async def on_open(callback: CallbackQuery, callback_data: SettingsCb, db: Database) -> None:
         await callback.answer()
-        await state.clear()
+        await drop_pending(callback.bot, callback.message.chat.id)
         screen = await _section_screen(db, callback_data.section)
         await _edit(callback.bot, callback.message.chat.id, callback.message.message_id, screen)
 
     @router.callback_query(SettingsCb.filter(F.action == "edit_url"))
-    async def on_edit_url(callback: CallbackQuery, state: FSMContext) -> None:
+    async def on_edit_url(callback: CallbackQuery) -> None:
         await callback.answer()
-        await state.set_state(SettingsInput.meet_url)
-        await state.update_data(settings_msg_id=callback.message.message_id)
-        await _edit(callback.bot, callback.message.chat.id, callback.message.message_id, _url_prompt_screen())
+        chat_id = callback.message.chat.id
+        await drop_pending(callback.bot, chat_id)
+        await _edit(callback.bot, chat_id, callback.message.message_id, _waiting_screen())
+        await ask_url(callback.bot, chat_id, callback.message.message_id, callback.from_user.id)
 
-    @router.message(SettingsInput.meet_url)
-    async def on_meet_url(message: Message, state: FSMContext, db: Database) -> None:
-        data = await state.get_data()
-        settings_msg_id = data["settings_msg_id"]
+    @router.message(is_pending_input)
+    async def on_meet_url(message: Message, db: Database) -> None:
+        p = await drop_pending(message.bot, message.chat.id)
         url = (message.text or "").strip()
 
         with suppress(TelegramBadRequest):
             await message.delete()
 
         if not _is_valid_url(url):
-            screen = _url_prompt_screen("Це не схоже на посилання. Воно має починатися з https://")
-            await _edit(message.bot, message.chat.id, settings_msg_id, screen)
+            await ask_url(
+                message.bot, message.chat.id, p.settings_msg_id, p.user_id,
+                error="Це не схоже на посилання. Воно має починатися з https://",
+            )
             return
 
         await db.set_setting(MEET_FORM_URL, url, message.from_user.id)
-        await state.clear()
         screen = await _section_screen(db, "meet", note="✅ Посилання збережено.")
-        await _edit(message.bot, message.chat.id, settings_msg_id, screen)
+        await _edit(message.bot, message.chat.id, p.settings_msg_id, screen)
 
     return router
