@@ -4,7 +4,7 @@ from aiogram.types import Message
 
 from bot.db import Database
 from bot.keyboards import MENU_BUTTONS, main_menu_kb, url_button_kb
-from bot.render import send_section
+from bot.render import send_schedule, send_section
 from bot.sections import SECTIONS
 from bot.settings import DONATIONS_URL, MEET_FORM_URL
 
@@ -24,6 +24,11 @@ async def on_meet(message: Message, db: Database) -> None:
         await message.answer("Давайте знайомитись! 👇", reply_markup=url_button_kb("📝 Заповнити анкету", url))
     else:
         await message.answer("Анкета незабаром з'явиться 🙏", reply_markup=main_menu_kb())
+
+
+@router.message(F.text == SECTIONS["schedule"].title)
+async def on_schedule(message: Message, db: Database) -> None:
+    await send_schedule(message.bot, message.chat.id, db, main_menu_kb())
 
 
 @router.message(F.text == SECTIONS["donations"].title)

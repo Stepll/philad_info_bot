@@ -9,7 +9,7 @@ from aiogram.types import BotCommand, BotCommandScopeAllPrivateChats, BotCommand
 
 from bot.config import load_config
 from bot.db import Database
-from bot.handlers import admin, admin_settings, user
+from bot.handlers import admin, admin_schedule, admin_settings, user
 
 
 async def set_commands(bot: Bot, admin_chat_id: int) -> None:
@@ -51,6 +51,7 @@ async def main() -> None:
         admin.common_router,
         admin.create_router(config.admin_chat_id),
         admin_settings.create_router(config.admin_chat_id),
+        admin_schedule.create_router(config.admin_chat_id),
         user.router,
     )
 

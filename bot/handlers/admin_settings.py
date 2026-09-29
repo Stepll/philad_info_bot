@@ -1,18 +1,17 @@
 """Інтерактивне меню /settings у групі адмінів."""
 
 from contextlib import suppress
-from dataclasses import dataclass
 from html import escape
 from urllib.parse import urlparse
 
-from aiogram import Bot, F, Router
+from aiogram import F, Router
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
-from aiogram.filters.callback_data import CallbackData
-from aiogram.types import CallbackQuery, ForceReply, InlineKeyboardMarkup, Message
+from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.db import Database
+from bot.handlers.admin_common import ScheduleCb, SettingsCb, edit_screen, prompts
 from bot.render import CAPTION_LIMIT
 from bot.sections import MENU_SECTIONS, SECTIONS
 from bot.settings import SECTION_FIELDS, SECTION_URL_KEYS
@@ -38,30 +37,16 @@ FIELD_DELETED = {"photo": "🗑 Фото видалено.", "text": "🗑 Те�
 FIELD_SAVED = {"photo": "✅ Фото збережено.", "text": "✅ Текст збережено.", "url": "✅ Посилання збережено."}
 
 
-class SettingsCb(CallbackData, prefix="st"):
-    action: str  # list | open | edit | delete | cancel_input
-    section: str = ""
-    field: str = ""  # photo | text | url
-
-
-@dataclass
-class PendingInput:
-    """Бот чекає від адміна значення у відповідь на повідомлення-запит."""
-
-    section: str
-    field: str
-    settings_msg_id: int
-    prompt_msg_id: int
-    user_id: int
-
-
 # --- Екрани ------------------------------------------------------------------
 
 
-def _list_screen() -> tuple[str, InlineKeyboardMarkup]:
+def list_screen() -> tuple[str, InlineKeyboardMarkup]:
     kb = InlineKeyboardBuilder()
     for key in MENU_SECTIONS:
-        kb.button(text=SECTIONS[key].title, callback_data=SettingsCb(action="open", section=key))
+        if key == "schedule":
+            kb.button(text=SECTIONS[key].title, callback_data=ScheduleCb(action="list"))
+        else:
+            kb.button(text=SECTIONS[key].title, callback_data=SettingsCb(action="open", section=key))
     kb.adjust(2)
     return "⚙️ <b>Налаштування</b>\n\nОберіть розділ:", kb.as_markup()
 
@@ -124,16 +109,6 @@ def _waiting_screen(key: str, field: str) -> tuple[str, InlineKeyboardMarkup]:
     return _header(key) + FIELD_WAITING[field], kb.as_markup()
 
 
-async def _edit(bot: Bot, chat_id: int, message_id: int, screen: tuple[str, InlineKeyboardMarkup]) -> None:
-    text, markup = screen
-    # "message is not modified" та подібне — не критично
-    with suppress(TelegramBadRequest):
-        await bot.edit_message_text(
-            text, chat_id=chat_id, message_id=message_id, reply_markup=markup,
-            disable_web_page_preview=True,
-        )
-
-
 def _is_valid_url(value: str) -> bool:
     parsed = urlparse(value)
     return parsed.scheme in ("http", "https") and bool(parsed.netloc) and " " not in value
@@ -147,63 +122,39 @@ def create_router(admin_chat_id: int) -> Router:
     router.message.filter(F.chat.id == admin_chat_id)
     router.callback_query.filter(F.message.chat.id == admin_chat_id)
 
-    # Очікуване введення (на чат). Приймаємо відповідь (reply) на запит — такі повідомлення
-    # доходять до бота навіть з увімкненим privacy mode і від анонімних адмінів.
-    pending: dict[int, PendingInput] = {}
-
-    async def drop_pending(bot: Bot, chat_id: int) -> PendingInput | None:
-        p = pending.pop(chat_id, None)
-        if p:
-            with suppress(TelegramBadRequest):
-                await bot.delete_message(chat_id, p.prompt_msg_id)
-        return p
-
-    async def ask_input(
-        bot: Bot, chat_id: int, section: str, field: str, settings_msg_id: int, user_id: int, error: str = ""
-    ) -> None:
-        text = FIELD_PROMPT[field]
-        if error:
-            text = f"⚠️ {error}\n\n{text}"
-        prompt = await bot.send_message(
-            chat_id, text, reply_markup=ForceReply(input_field_placeholder=FIELD_PLACEHOLDER[field])
-        )
-        pending[chat_id] = PendingInput(section, field, settings_msg_id, prompt.message_id, user_id)
-
-    def is_pending_input(message: Message) -> bool:
-        p = pending.get(message.chat.id)
-        if not p:
-            return False
-        reply = message.reply_to_message
-        return (reply is not None and reply.message_id == p.prompt_msg_id) or (
-            message.from_user is not None and message.from_user.id == p.user_id
+    async def ask_input(bot, chat_id: int, section: str, field: str, settings_msg_id: int, user_id: int, error: str = "") -> None:
+        await prompts.ask(
+            bot, chat_id, FIELD_PROMPT[field],
+            kind="section", settings_msg_id=settings_msg_id, user_id=user_id,
+            data={"section": section, "field": field},
+            placeholder=FIELD_PLACEHOLDER[field], error=error,
         )
 
     @router.message(Command("settings"))
     async def cmd_settings(message: Message) -> None:
-        await drop_pending(message.bot, message.chat.id)
-        text, markup = _list_screen()
+        await prompts.drop(message.bot, message.chat.id)
+        text, markup = list_screen()
         await message.answer(text, reply_markup=markup)
 
     @router.callback_query(SettingsCb.filter(F.action == "list"))
     async def on_list(callback: CallbackQuery) -> None:
         await callback.answer()
-        await drop_pending(callback.bot, callback.message.chat.id)
-        await _edit(callback.bot, callback.message.chat.id, callback.message.message_id, _list_screen())
+        await prompts.drop(callback.bot, callback.message.chat.id)
+        await edit_screen(callback.bot, callback.message.chat.id, callback.message.message_id, list_screen())
 
     @router.callback_query(SettingsCb.filter(F.action.in_({"open", "cancel_input"})))
     async def on_open(callback: CallbackQuery, callback_data: SettingsCb, db: Database) -> None:
         await callback.answer()
-        await drop_pending(callback.bot, callback.message.chat.id)
+        await prompts.drop(callback.bot, callback.message.chat.id)
         screen = await _section_screen(db, callback_data.section)
-        await _edit(callback.bot, callback.message.chat.id, callback.message.message_id, screen)
+        await edit_screen(callback.bot, callback.message.chat.id, callback.message.message_id, screen)
 
     @router.callback_query(SettingsCb.filter(F.action == "edit"))
     async def on_edit(callback: CallbackQuery, callback_data: SettingsCb) -> None:
         await callback.answer()
         chat_id = callback.message.chat.id
         key, field = callback_data.section, callback_data.field
-        await drop_pending(callback.bot, chat_id)
-        await _edit(callback.bot, chat_id, callback.message.message_id, _waiting_screen(key, field))
+        await edit_screen(callback.bot, chat_id, callback.message.message_id, _waiting_screen(key, field))
         await ask_input(callback.bot, chat_id, key, field, callback.message.message_id, callback.from_user.id)
 
     @router.callback_query(SettingsCb.filter(F.action == "delete"))
@@ -218,43 +169,44 @@ def create_router(admin_chat_id: int) -> Router:
         elif field == "url":
             await db.set_setting(SECTION_URL_KEYS[key], None, user_id)
         screen = await _section_screen(db, key, note=FIELD_DELETED[field])
-        await _edit(callback.bot, callback.message.chat.id, callback.message.message_id, screen)
+        await edit_screen(callback.bot, callback.message.chat.id, callback.message.message_id, screen)
 
-    @router.message(is_pending_input)
+    @router.message(prompts.filter("section"))
     async def on_input(message: Message, db: Database) -> None:
-        p = await drop_pending(message.bot, message.chat.id)
+        p = await prompts.drop(message.bot, message.chat.id)
+        section, field = p.data["section"], p.data["field"]
         with suppress(TelegramBadRequest):
             await message.delete()
 
         async def retry(error: str) -> None:
-            await ask_input(message.bot, message.chat.id, p.section, p.field, p.settings_msg_id, p.user_id, error)
+            await ask_input(message.bot, message.chat.id, section, field, p.settings_msg_id, p.user_id, error)
 
         user_id = message.from_user.id
-        note = FIELD_SAVED[p.field]
+        note = FIELD_SAVED[field]
 
-        if p.field == "photo":
+        if field == "photo":
             if not message.photo:
                 return await retry("Потрібне саме фото (не файлом).")
-            await db.set_photo(p.section, message.photo[-1].file_id, user_id)
+            await db.set_photo(section, message.photo[-1].file_id, user_id)
 
-        elif p.field == "text":
+        elif field == "text":
             if not message.text:
                 return await retry("Потрібен текст.")
-            await db.set_text(p.section, message.html_text, user_id)
-            content = await db.get_section(p.section)
+            await db.set_text(section, message.html_text, user_id)
+            content = await db.get_section(section)
             if content.photo_id and len(content.text) > CAPTION_LIMIT:
                 note += (
                     f"\n⚠️ Текст довший за {CAPTION_LIMIT} символів — "
                     "фото і текст надсилатимуться двома повідомленнями."
                 )
 
-        elif p.field == "url":
+        elif field == "url":
             url = (message.text or "").strip()
             if not _is_valid_url(url):
                 return await retry("Це не схоже на посилання. Воно має починатися з https://")
-            await db.set_setting(SECTION_URL_KEYS[p.section], url, user_id)
+            await db.set_setting(SECTION_URL_KEYS[section], url, user_id)
 
-        screen = await _section_screen(db, p.section, note=note)
-        await _edit(message.bot, message.chat.id, p.settings_msg_id, screen)
+        screen = await _section_screen(db, section, note=note)
+        await edit_screen(message.bot, message.chat.id, p.settings_msg_id, screen)
 
     return router

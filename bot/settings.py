@@ -1,6 +1,8 @@
 # Ключі таблиці settings
 MEET_FORM_URL = "meet_form_url"
 DONATIONS_URL = "donations_url"
+# file_id останньої згенерованої картинки розкладу (скидається після кожної зміни)
+SCHEDULE_FILE_ID = "schedule_file_id"
 
 # Розділ -> ключ налаштування з його посиланням
 SECTION_URL_KEYS = {"meet": MEET_FORM_URL, "donations": DONATIONS_URL}

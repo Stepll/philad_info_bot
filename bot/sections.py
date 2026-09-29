@@ -23,7 +23,8 @@ SECTIONS: dict[str, Section] = {
         ),
         Section("events", "📅 Події", _PLACEHOLDER),
         Section("homegroups", "🏠 Домашні групи", _PLACEHOLDER),
-        Section("schedule", "🕐 Розклад", _PLACEHOLDER),
+        # Розклад — згенерована картинка, редагується блоками в /settings
+        Section("schedule", "🕐 Розклад", "", has_content=False),
         Section("serving", "🙌 Потреба в служінні", _PLACEHOLDER),
         Section("donations", "💛 Пожертвування", _PLACEHOLDER),
         Section("meet", "🤝 Давай знайомитись", "", has_content=False),
