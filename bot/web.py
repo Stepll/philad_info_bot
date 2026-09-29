@@ -5,6 +5,7 @@ iPhone додає подію з .ics лише в справжньому Safari. 
 події з кнопкою «Відкрити в Safari» (x-safari-https://, iOS 17+) і «Додати в календар».
 """
 
+import json
 import logging
 from html import escape
 
@@ -52,7 +53,15 @@ _PAGE = """<!doctype html>
     <h1>{title}</h1>
     <p class="meta">{meta}</p>
   </div>
-  <div class="card">
+{steps}
+</main>
+{script}
+</body>
+</html>
+"""
+
+
+_STEPS_TELEGRAM = """  <div class="card">
     <p class="step">Крок 1. Якщо ця сторінка відкрилась у Telegram — перейдіть у Safari:</p>
     <a class="btn secondary" href="{safari_url}">Відкрити в Safari</a>
     <p class="hint">Не спрацювало? Натисніть значок компаса або «⋯» внизу екрана → «Відкрити в Safari».</p>
@@ -61,25 +70,35 @@ _PAGE = """<!doctype html>
     <p class="step">Крок 2. У Safari натисніть:</p>
     <a class="btn" href="{ics_url}">📅 Додати в календар</a>
     <p class="hint">Якщо телефон пропонує «Підписатися на календар» — ви ще в Telegram, поверніться до кроку 1.</p>
-  </div>
-</main>
-</body>
-</html>
-"""
+  </div>"""
 
+# Сторінку відкрито нашою кнопкою «Відкрити в Safari» — отже це справжній Safari
+_STEPS_SAFARI = """  <div class="card">
+    <p class="step">Відкриваю календар… Натисніть «Додати» у вікні, що з'явиться.</p>
+    <a class="btn" href="{ics_url}">📅 Додати в календар</a>
+    <p class="hint">Якщо вікно не з'явилось — натисніть кнопку вище.</p>
+  </div>"""
 
-def _page(config: Config, event: Event) -> str:
+_AUTO_OPEN = """<script>
+  window.addEventListener("load", function () {{
+    setTimeout(function () {{ window.location.href = {ics_url_js}; }}, 400);
+  }});
+</script>"""
+
+def _page(config: Config, event: Event, in_safari: bool) -> str:
     meta = format_date(event.day)
     if event.time:
         meta += f" · {event.time}"
     if event.place:
         meta += f"<br>{escape(event.place)}"
     page_url = calendar_url(config, event)
+    ics_url = f"{page_url}.ics"
+    steps = _STEPS_SAFARI if in_safari else _STEPS_TELEGRAM
     return _PAGE.format(
         title=escape(event.title),
         meta=meta,
-        safari_url=escape(f"x-safari-{page_url}"),
-        ics_url=escape(f"{page_url}.ics"),
+        steps=steps.format(safari_url=escape(f"x-safari-{page_url}?auto=1"), ics_url=escape(ics_url)),
+        script=_AUTO_OPEN.format(ics_url_js=json.dumps(ics_url)) if in_safari else "",
     )
 
 
@@ -99,7 +118,8 @@ def create_app(db: Database, config: Config) -> web.Application:
 
     async def event_page(request: web.Request) -> web.Response:
         event = await actual_event(request)
-        return web.Response(text=_page(config, event), content_type="text/html", charset="utf-8")
+        in_safari = request.query.get("auto") == "1"
+        return web.Response(text=_page(config, event, in_safari), content_type="text/html", charset="utf-8")
 
     async def event_ics(request: web.Request) -> web.Response:
         event = await actual_event(request)
