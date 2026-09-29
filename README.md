@@ -30,6 +30,8 @@ iPhone пропонує додати подію в календар, лише к
 3. У `.env`: `PUBLIC_URL=https://philad.duckdns.org` і перезапустіть бота.
 4. Перевірка: `curl https://philad.duckdns.org/cal/health` → `ok`.
 
+Кнопка «🍏 iPhone» веде на сторінку події (`/cal/<id>`): вбудований браузер Telegram не додає подію, а пропонує підписку, тому сторінка спершу пропонує «Відкрити в Safari» (`x-safari-https://`, iOS 17+), а потім «Додати в календар» (`/cal/<id>.ics`).
+
 Без `PUBLIC_URL` бот надсилає .ics-файлом (на iPhone з Telegram його не додати — лишається кнопка Google Calendar).
 
 ## Налаштування (`/settings`)

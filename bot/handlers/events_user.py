@@ -118,7 +118,9 @@ async def on_calendar(callback: CallbackQuery, callback_data: EventNav, db: Data
     if config.public_url:
         # iPhone додає подію, лише якщо .ics відкрито в браузері — тому посилання на наш сервер
         await callback.message.answer(
-            title + "Оберіть свій календар 👇",
+            title + "Оберіть свій календар 👇\n\n"
+            "<i>На iPhone сторінка відкриється в браузері Telegram — натисніть на ній «Відкрити в Safari», "
+            "а потім «Додати в календар».</i>",
             reply_markup=InlineKeyboardMarkup(
                 inline_keyboard=[
                     [InlineKeyboardButton(text="🍏 iPhone / Apple Calendar", url=calendar_url(config, event))],
