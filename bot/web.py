@@ -1,5 +1,8 @@
 """Маленький HTTP-сервер: сторінка події і .ics-файл для календаря.
 
+Сторінка визначає систему за User-Agent: на Android — кнопка intent:// (форма нової
+події в календарі телефону), на iPhone — перехід у Safari і .ics (див. нижче).
+
 iPhone додає подію з .ics лише в справжньому Safari. Вбудований браузер Telegram
 замість цього пропонує «підписатися на календар», тому кнопка в боті веде на сторінку
 події з кнопкою «Відкрити в Safari» (x-safari-https://, iOS 17+) і «Додати в календар».
@@ -19,7 +22,7 @@ from aiohttp import web
 
 from bot.config import Config
 from bot.db import Database
-from bot.events import Event, build_ics, format_date, google_calendar_url, ics_filename
+from bot.events import Event, android_intent_url, build_ics, format_date, google_calendar_url, ics_filename
 
 log = logging.getLogger(__name__)
 
@@ -57,11 +60,9 @@ def _parse_token(config: Config, token: str) -> tuple[int, int] | None:
     return chat_id, message_id
 
 
-def picker_urls(config: Config, event: Event, chat_id: int, message_id: int) -> tuple[str, str]:
-    """(iPhone, Google) — обидва через наш сервер, щоб прибрати повідомлення після натискання."""
-    m = message_token(config, chat_id, message_id)
-    page = calendar_url(config, event)
-    return f"{page}?m={m}", f"{page}/google?m={m}"
+def picker_url(config: Config, event: Event, chat_id: int, message_id: int) -> str:
+    """Сторінка події з токеном, щоб прибрати повідомлення з кнопкою після відкриття."""
+    return f"{calendar_url(config, event)}?m={message_token(config, chat_id, message_id)}"
 
 
 _PAGE = """<!doctype html>
@@ -109,7 +110,8 @@ _STEPS_TELEGRAM = """  <div class="card">
     <p class="step">Крок 2. У Safari натисніть:</p>
     <a class="btn" href="{ics_url}">📅 Додати в календар</a>
     <p class="hint">Якщо телефон пропонує «Підписатися на календар» — ви ще в Telegram, поверніться до кроку 1.</p>
-  </div>"""
+  </div>
+  <p class="hint">Користуєтесь Google Calendar? <a href="{google_url}">Додати через Google</a></p>"""
 
 # Сторінку відкрито нашою кнопкою «Відкрити в Safari» — отже це справжній Safari
 _STEPS_SAFARI = """  <div class="card">
@@ -118,13 +120,21 @@ _STEPS_SAFARI = """  <div class="card">
     <p class="hint">Якщо вікно не з'явилось — натисніть кнопку вище.</p>
   </div>"""
 
+# Android: системна форма «нова подія» в календарі телефону (Google, Samsung…), логін не потрібен
+_STEPS_ANDROID = """  <div class="card">
+    <a class="btn" href="{intent_url}">📅 Додати в календар</a>
+    <p class="hint">Відкриється форма нової події в календарі телефону — натисніть «Зберегти».</p>
+    <p class="hint">Не спрацювало? Натисніть «⋮» вгорі → «Відкрити в Chrome» і спробуйте ще раз.</p>
+  </div>
+  <p class="hint">Або <a href="{google_url}">додати через Google Calendar у браузері</a> (потрібен вхід у Google).</p>"""
+
 _AUTO_OPEN = """<script>
   window.addEventListener("load", function () {{
     setTimeout(function () {{ window.location.href = {ics_url_js}; }}, 400);
   }});
 </script>"""
 
-def _page(config: Config, event: Event, in_safari: bool) -> str:
+def _page(config: Config, event: Event, in_safari: bool, android: bool = False) -> str:
     meta = format_date(event.day)
     if event.time:
         meta += f" · {event.time}"
@@ -132,12 +142,22 @@ def _page(config: Config, event: Event, in_safari: bool) -> str:
         meta += f"<br>{escape(event.place)}"
     page_url = calendar_url(config, event)
     ics_url = f"{page_url}.ics"
-    steps = _STEPS_SAFARI if in_safari else _STEPS_TELEGRAM
+    if android:
+        steps = _STEPS_ANDROID
+    elif in_safari:
+        steps = _STEPS_SAFARI
+    else:
+        steps = _STEPS_TELEGRAM
     return _PAGE.format(
         title=escape(event.title),
         meta=meta,
-        steps=steps.format(safari_url=escape(f"x-safari-{page_url}?auto=1"), ics_url=escape(ics_url)),
-        script=_AUTO_OPEN.format(ics_url_js=json.dumps(ics_url)) if in_safari else "",
+        steps=steps.format(
+            safari_url=escape(f"x-safari-{page_url}?auto=1"),
+            ics_url=escape(ics_url),
+            google_url=escape(f"{page_url}/google"),
+            intent_url=escape(android_intent_url(event, config.timezone)),
+        ),
+        script=_AUTO_OPEN.format(ics_url_js=json.dumps(ics_url)) if in_safari and not android else "",
     )
 
 
@@ -165,7 +185,8 @@ def create_app(bot: Bot, db: Database, config: Config) -> web.Application:
         event = await actual_event(request)
         asyncio.create_task(delete_picker(request))
         in_safari = request.query.get("auto") == "1"
-        return web.Response(text=_page(config, event, in_safari), content_type="text/html", charset="utf-8")
+        android = "android" in request.headers.get("User-Agent", "").lower()
+        return web.Response(text=_page(config, event, in_safari, android), content_type="text/html", charset="utf-8")
 
     async def google(request: web.Request) -> web.Response:
         event = await actual_event(request)

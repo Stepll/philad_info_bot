@@ -4,7 +4,8 @@ import re
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from html import escape, unescape
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
+from zoneinfo import ZoneInfo
 
 # Підпис під фото — до 1024 символів; решту займає рядок з датою/часом/місцем
 EVENT_TEXT_LIMIT = 850
@@ -146,3 +147,41 @@ def google_calendar_url(event: Event) -> str:
     if event.place:
         params["location"] = event.place
     return "https://calendar.google.com/calendar/render?" + urlencode(params)
+
+
+def android_intent_url(event: Event, timezone_name: str) -> str:
+    """intent:// для Chrome на Android: відкриває форму нової події в календарі телефону.
+
+    Android приймає час у мілісекундах від епохи, тому «плаваючий» час події прив'язуємо
+    до часового поясу церкви. Для події на весь день — опівніч UTC, як вимагає Android.
+    """
+    if event.time:
+        h, m = map(int, event.time.split(":"))
+        start = datetime.combine(event.day, datetime.min.time()).replace(hour=h, minute=m, tzinfo=ZoneInfo(timezone_name))
+        end = start + CALENDAR_DURATION
+        all_day = False
+    else:
+        start = datetime.combine(event.day, datetime.min.time(), tzinfo=timezone.utc)
+        end = start + timedelta(days=1)
+        all_day = True
+
+    description = html_to_plain(event.text).strip()
+    if event.url:
+        description = f"{description}\n\n{event.url}".strip()
+    if len(description) > 500:
+        description = description[:500] + "…"
+
+    extras = [
+        "action=android.intent.action.INSERT",
+        "type=vnd.android.cursor.item/event",
+        f"S.title={quote(event.title, safe='')}",
+        f"l.beginTime={int(start.timestamp() * 1000)}",
+        f"l.endTime={int(end.timestamp() * 1000)}",
+    ]
+    if all_day:
+        extras.append("B.allDay=true")
+    if event.place:
+        extras.append(f"S.eventLocation={quote(event.place, safe='')}")
+    if description:
+        extras.append(f"S.description={quote(description, safe='')}")
+    return "intent:#Intent;" + ";".join(extras) + ";end"
