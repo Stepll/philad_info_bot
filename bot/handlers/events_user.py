@@ -45,13 +45,6 @@ def event_kb(
     event = events[index]
     kb = InlineKeyboardBuilder()
     sizes = []
-    if len(events) > 1:
-        prev_id = events[index - 1].id
-        next_id = events[(index + 1) % len(events)].id
-        kb.button(text="◀️", callback_data=EventNav(action="show", event=prev_id))
-        kb.button(text=f"{index + 1} / {len(events)}", callback_data=EventNav(action="noop"))
-        kb.button(text="▶️", callback_data=EventNav(action="show", event=next_id))
-        sizes.append(3)
     if event.url:
         kb.button(text="🔗 Детальніше", url=event.url)
         sizes.append(1)
@@ -63,6 +56,14 @@ def event_kb(
     else:
         kb.button(text=label, callback_data=EventNav(action="cal", event=event.id))
     sizes.append(1)
+    # Гортання — в самому низу
+    if len(events) > 1:
+        prev_id = events[index - 1].id
+        next_id = events[(index + 1) % len(events)].id
+        kb.button(text="◀️", callback_data=EventNav(action="show", event=prev_id))
+        kb.button(text=f"{index + 1} / {len(events)}", callback_data=EventNav(action="noop"))
+        kb.button(text="▶️", callback_data=EventNav(action="show", event=next_id))
+        sizes.append(3)
     kb.adjust(*sizes)
     return kb.as_markup()
 

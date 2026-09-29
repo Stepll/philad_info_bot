@@ -28,8 +28,8 @@ from bot.schedule import parse_time
 HEADER = "⚙️ <b>📅 Події</b>\n\n"
 LABEL_MAX_LEN = 40
 
-# Кроки додавання події; час і місце — пізніше, з екрана події
-ADD_FLOW = ["poster", "text", "date", "url"]
+# Кроки додавання події; час, місце і посилання — пізніше, з екрана події
+ADD_FLOW = ["poster", "text", "date"]
 OPTIONAL_FIELDS = {"time", "place", "url"}
 COLUMN = {"poster": "poster_id", "text": "text", "date": "date", "time": "time", "place": "place", "url": "url"}
 
@@ -135,9 +135,7 @@ def _event_screen(event: Event, today, in_calendar: int, note: str = "") -> Scre
 def _waiting_screen(event: Event | None, field: str, adding: bool) -> Screen:
     kb = InlineKeyboardBuilder()
     event_id = event.id if event else 0
-    if adding and field == "url":
-        kb.button(text="➡️ Без посилання", callback_data=EventCb(action="skip", event=event_id))
-    elif event and field in OPTIONAL_FIELDS and getattr(event, field):
+    if event and not adding and field in OPTIONAL_FIELDS and getattr(event, field):
         kb.button(text="🗑 Прибрати", callback_data=EventCb(action="clear", event=event_id, value=field))
     back = EventCb(action="cancel_input", event=event_id) if event else EventCb(action="list")
     kb.button(text="⬅️ Назад", callback_data=back)
@@ -187,7 +185,7 @@ def create_router(admin_chat_id: int) -> Router:
         index = ADD_FLOW.index(field) + 1
         if index < len(ADD_FLOW):
             return await ask(bot, chat_id, settings_msg_id, user_id, event, ADD_FLOW[index], adding=True)
-        note = "✅ Подію додано. Час і місце можна задати кнопками нижче."
+        note = "✅ Подію додано. Час, місце і посилання можна задати кнопками нижче."
         await edit_screen(bot, chat_id, settings_msg_id, await event_screen(db, config, event, note))
 
     async def show(callback: CallbackQuery, screen: Screen) -> None:
@@ -231,10 +229,6 @@ def create_router(admin_chat_id: int) -> Router:
         if action == "delete_yes":
             await db.delete_event(event.id)
             return await show(callback, await list_screen(db, config, note="🗑 Подію видалено."))
-        if action == "skip":  # «Без посилання» — останній крок додавання
-            return await next_step(callback.bot, chat_id, callback.message.message_id, callback.from_user.id,
-                                   event, "url", db, config)
-
         note = ""
         if action == "clear" and field in OPTIONAL_FIELDS:
             await db.update_event(event.id, COLUMN[field], None)

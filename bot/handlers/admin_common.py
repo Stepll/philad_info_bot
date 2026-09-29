@@ -27,7 +27,7 @@ class ScheduleCb(CallbackData, prefix="sc"):
 
 
 class EventCb(CallbackData, prefix="ev"):
-    # list | open | add | edit | clear | skip | delete | delete_yes | preview | cancel_input
+    # list | open | add | edit | clear | delete | delete_yes | preview | cancel_input
     action: str
     event: int = 0
     value: str = ""  # поле: poster | text | date | time | place | url
