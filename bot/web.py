@@ -50,6 +50,7 @@ _PAGE = """<!doctype html>
           padding:15px; background:var(--accent); color:#fff; }}
   a.btn.secondary {{ background:transparent; color:var(--accent); border:1.5px solid var(--accent); }}
   .hint {{ color:var(--muted); font-size:14px; margin:12px 0 0; }}
+  .hint.important {{ color:var(--text); font-size:15px; }}
 </style>
 </head>
 <body>
@@ -74,14 +75,16 @@ _STEPS_TELEGRAM = """  <div class="card">
   <div class="card">
     <p class="step">Крок 2. У Safari натисніть:</p>
     <a class="btn" href="{ics_url}">📅 Додати в календар</a>
+    <p class="hint important">⚠️ У вікні події натисніть «Додати» і <b>оберіть календар</b> (напр. iCloud) — без цього подія не збережеться.</p>
     <p class="hint">Якщо телефон пропонує «Підписатися на календар» — ви ще в Telegram, поверніться до кроку 1.</p>
   </div>
   <p class="hint">Користуєтесь Google Calendar? <a href="{google_url}">Додати через Google</a></p>"""
 
 # Сторінку відкрито нашою кнопкою «Відкрити в Safari» — отже це справжній Safari
 _STEPS_SAFARI = """  <div class="card">
-    <p class="step">Відкриваю календар… Натисніть «Додати» у вікні, що з'явиться.</p>
+    <p class="step">Відкриваю календар…</p>
     <a class="btn" href="{ics_url}">📅 Додати в календар</a>
+    <p class="hint important">⚠️ У вікні події натисніть «Додати» і <b>оберіть календар</b> (напр. iCloud) — без цього подія не збережеться.</p>
     <p class="hint">Якщо вікно не з'явилось — натисніть кнопку вище.</p>
   </div>"""
 
