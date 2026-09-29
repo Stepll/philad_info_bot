@@ -9,60 +9,25 @@ iPhone додає подію з .ics лише в справжньому Safari. 
 """
 
 import asyncio
-import hashlib
-import hmac
 import json
 import logging
-from contextlib import suppress
 from html import escape
 
 from aiogram import Bot
-from aiogram.exceptions import TelegramAPIError
 from aiohttp import web
 
+from bot.cal_links import CAL_PATH, event_page_url, parse_token
 from bot.config import Config
 from bot.db import Database
 from bot.events import Event, android_intent_url, build_ics, format_date, google_calendar_url, ics_filename
+from bot.handlers.events_user import mark_opened
 
 log = logging.getLogger(__name__)
-
-CAL_PATH = "/cal"
 
 
 def calendar_url(config: Config, event: Event) -> str:
     """Сторінка події (з неї — в Safari і в календар)."""
-    return f"{config.public_url}{CAL_PATH}/{event.id}"
-
-
-# --- Прибирання повідомлення з вибором календаря ---------------------------
-# Telegram не повідомляє боту про натискання кнопки-посилання, тому посилання
-# несуть підписаний параметр ?m=<chat>.<message>.<підпис>: відкривши його, сервер
-# видаляє те повідомлення. Підпис не дає видаляти довільні повідомлення.
-
-
-def _sign(config: Config, chat_id: int, message_id: int) -> str:
-    key = hashlib.sha256(f"cal-msg:{config.bot_token}".encode()).digest()
-    return hmac.new(key, f"{chat_id}.{message_id}".encode(), hashlib.sha256).hexdigest()[:16]
-
-
-def message_token(config: Config, chat_id: int, message_id: int) -> str:
-    return f"{chat_id}.{message_id}.{_sign(config, chat_id, message_id)}"
-
-
-def _parse_token(config: Config, token: str) -> tuple[int, int] | None:
-    try:
-        chat, message, sig = token.split(".")
-        chat_id, message_id = int(chat), int(message)
-    except ValueError:
-        return None
-    if not hmac.compare_digest(sig, _sign(config, chat_id, message_id)):
-        return None
-    return chat_id, message_id
-
-
-def picker_url(config: Config, event: Event, chat_id: int, message_id: int) -> str:
-    """Сторінка події з токеном, щоб прибрати повідомлення з кнопкою після відкриття."""
-    return f"{calendar_url(config, event)}?m={message_token(config, chat_id, message_id)}"
+    return event_page_url(config, event.id)
 
 
 _PAGE = """<!doctype html>
@@ -162,11 +127,11 @@ def _page(config: Config, event: Event, in_safari: bool, android: bool = False) 
 
 
 def create_app(bot: Bot, db: Database, config: Config) -> web.Application:
-    async def delete_picker(request: web.Request) -> None:
-        parsed = _parse_token(config, request.query.get("m", ""))
+    def mark_from_link(request: web.Request, event: Event) -> None:
+        """Сторінку відкрито кнопкою з постера — «✅ У календарі» (у фоні, щоб не гальмувати сторінку)."""
+        parsed = parse_token(config, event.id, request.query.get("m", ""))
         if parsed:
-            with suppress(TelegramAPIError):
-                await bot.delete_message(*parsed)
+            asyncio.create_task(mark_opened(bot, db, config, *parsed, event.id))
 
     async def health(_: web.Request) -> web.Response:
         return web.Response(text="ok")
@@ -183,14 +148,13 @@ def create_app(bot: Bot, db: Database, config: Config) -> web.Application:
 
     async def event_page(request: web.Request) -> web.Response:
         event = await actual_event(request)
-        asyncio.create_task(delete_picker(request))
+        mark_from_link(request, event)
         in_safari = request.query.get("auto") == "1"
         android = "android" in request.headers.get("User-Agent", "").lower()
         return web.Response(text=_page(config, event, in_safari, android), content_type="text/html", charset="utf-8")
 
     async def google(request: web.Request) -> web.Response:
         event = await actual_event(request)
-        asyncio.create_task(delete_picker(request))
         raise web.HTTPFound(google_calendar_url(event))
 
     async def event_ics(request: web.Request) -> web.Response:
