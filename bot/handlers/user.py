@@ -6,7 +6,7 @@ from bot.db import Database
 from bot.keyboards import MENU_BUTTONS, main_menu_kb, url_button_kb
 from bot.render import send_schedule, send_section
 from bot.sections import SECTIONS
-from bot.settings import DONATIONS_URL, MEET_FORM_URL
+from bot.settings import MEET_FORM_URL, SECTION_URL_BUTTONS, SECTION_URL_KEYS
 
 router = Router(name="user")
 router.message.filter(F.chat.type == "private")
@@ -31,11 +31,16 @@ async def on_schedule(message: Message, db: Database) -> None:
     await send_schedule(message.bot, message.chat.id, db, main_menu_kb())
 
 
-@router.message(F.text == SECTIONS["donations"].title)
-async def on_donations(message: Message, db: Database) -> None:
-    url = await db.get_setting(DONATIONS_URL)
-    markup = url_button_kb("💛 Пожертвувати онлайн", url) if url else main_menu_kb()
-    await send_section(message.bot, message.chat.id, db, "donations", markup)
+# Фото + текст + кнопка з посиланням (пожертви, домашні групи…)
+URL_SECTION_TITLES = {SECTIONS[key].title: key for key in SECTION_URL_BUTTONS}
+
+
+@router.message(F.text.in_(URL_SECTION_TITLES))
+async def on_url_section(message: Message, db: Database) -> None:
+    key = URL_SECTION_TITLES[message.text]
+    url = await db.get_setting(SECTION_URL_KEYS[key])
+    markup = url_button_kb(SECTION_URL_BUTTONS[key], url) if url else main_menu_kb()
+    await send_section(message.bot, message.chat.id, db, key, markup)
 
 
 @router.message(F.text.in_(MENU_BUTTONS))
