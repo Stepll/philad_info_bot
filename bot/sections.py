@@ -27,9 +27,10 @@ SECTIONS: dict[str, Section] = {
         # Потреба в служінні — список потреб з відгуками, редагується в /settings
         Section("serving", "🙌 Потреба в служінні", ""),
         Section("donations", "💛 Пожертвування", _PLACEHOLDER),
+        Section("socials", "🌐 Соцмережі", _PLACEHOLDER),
         Section("meet", "🤝 Давай знайомитись", ""),
     )
 }
 
 # Кнопки головного меню (welcome показується на /start, а не як кнопка)
-MENU_SECTIONS = ["events", "homegroups", "schedule", "serving", "donations", "meet"]
+MENU_SECTIONS = ["events", "homegroups", "schedule", "serving", "donations", "socials", "meet"]
