@@ -45,5 +45,5 @@ def load_config() -> Config:
         timezone=os.getenv("TIMEZONE", "Europe/Kyiv"),
         public_url=os.getenv("PUBLIC_URL", "").rstrip("/"),
         web_host=os.getenv("WEB_HOST", "127.0.0.1"),
-        web_port=int(os.getenv("WEB_PORT") or 8080),
+        web_port=int(os.getenv("WEB_PORT") or 8765),
     )
