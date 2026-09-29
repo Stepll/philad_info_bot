@@ -61,7 +61,16 @@ async def main() -> None:
     await set_commands(bot, config.admin_chat_id)
     await bot.delete_webhook(drop_pending_updates=True)
 
-    web_runner = await start_web(db, config) if config.public_url else None
+    web_runner = None
+    if config.public_url:
+        # Помилка вебсервера (напр. зайнятий порт) не повинна зупиняти бота
+        try:
+            web_runner = await start_web(db, config)
+        except OSError:
+            logging.exception(
+                "Не вдалося запустити вебсервер на %s:%s — календарні посилання не працюватимуть",
+                config.web_host, config.web_port,
+            )
     try:
         await dp.start_polling(bot)
     finally:
