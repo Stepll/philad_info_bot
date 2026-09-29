@@ -26,7 +26,8 @@ SECTIONS: dict[str, Section] = {
         Section("homegroups", "🏠 Домашні групи", _PLACEHOLDER),
         # Розклад — згенерована картинка, редагується блоками в /settings
         Section("schedule", "🕐 Розклад", "", has_content=False),
-        Section("serving", "🙌 Потреба в служінні", _PLACEHOLDER),
+        # Потреба в служінні — список потреб з відгуками, редагується в /settings
+        Section("serving", "🙌 Потреба в служінні", "", has_content=False),
         Section("donations", "💛 Пожертвування", _PLACEHOLDER),
         Section("meet", "🤝 Давай знайомитись", "", has_content=False),
     )

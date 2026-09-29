@@ -33,6 +33,13 @@ class EventCb(CallbackData, prefix="ev"):
     value: str = ""  # поле: poster | text | date | time | place | url
 
 
+class ServingCb(CallbackData, prefix="sv"):
+    # list | open | add | edit | clear | skip | preview | delete | delete_yes | cancel_input
+    action: str
+    need: int = 0
+    value: str = ""  # поле: title | summary | description | responsible
+
+
 def is_valid_url(value: str) -> bool:
     parsed = urlparse(value)
     return parsed.scheme in ("http", "https") and bool(parsed.netloc) and " " not in value
@@ -52,7 +59,7 @@ async def edit_screen(bot: Bot, chat_id: int, message_id: int, screen: Screen) -
 class PendingInput:
     """Бот чекає від адміна значення у відповідь на повідомлення-запит."""
 
-    kind: str  # хто обробляє: "section" | "schedule"
+    kind: str  # хто обробляє: "section" | "schedule" | "event" | "serving"
     settings_msg_id: int
     prompt_msg_id: int
     user_id: int

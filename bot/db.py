@@ -6,6 +6,7 @@ import aiosqlite
 
 from bot.events import Event
 from bot.schedule import SEED, ScheduleItem
+from bot.serving import Need
 from bot.sections import SECTIONS
 
 _SCHEMA = """
@@ -45,9 +46,31 @@ CREATE TABLE IF NOT EXISTS event_calendar (
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (user_id, event_id)
 );
+CREATE TABLE IF NOT EXISTS users (
+    id         INTEGER PRIMARY KEY,
+    username   TEXT,
+    full_name  TEXT,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS users_username ON users (username COLLATE NOCASE);
+CREATE TABLE IF NOT EXISTS serving_needs (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    title       TEXT NOT NULL,
+    summary     TEXT NOT NULL DEFAULT '',
+    description TEXT NOT NULL DEFAULT '',
+    responsible TEXT
+);
+CREATE TABLE IF NOT EXISTS serving_responses (
+    user_id    INTEGER NOT NULL,
+    need_id    INTEGER NOT NULL,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, need_id)
+);
 """
 
 _EVENT_COLUMNS = {"poster_id", "text", "date", "time", "place", "url"}
+_NEED_COLUMNS = {"title", "summary", "description", "responsible"}
+_NEED_SELECT = "SELECT id, title, summary, description, responsible FROM serving_needs"
 _EVENT_SELECT = "SELECT id, poster_id, text, date, time, place, url FROM events"
 
 _SCHEDULE_SEEDED = "schedule_seeded"
@@ -226,6 +249,79 @@ class Database:
         async with aiosqlite.connect(self.path) as db:
             cur = await db.execute("SELECT COUNT(*) FROM event_calendar WHERE event_id = ?", (event_id,))
             return (await cur.fetchone())[0]
+
+    # --- Користувачі (щоб бот міг написати відповідальному за @username) ---
+
+    async def upsert_user(self, user_id: int, username: str | None, full_name: str) -> None:
+        async with aiosqlite.connect(self.path) as db:
+            await db.execute(
+                """
+                INSERT INTO users (id, username, full_name) VALUES (?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    username = excluded.username,
+                    full_name = excluded.full_name,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (user_id, username, full_name),
+            )
+            await db.commit()
+
+    async def find_user_id(self, username: str) -> int | None:
+        async with aiosqlite.connect(self.path) as db:
+            cur = await db.execute(
+                "SELECT id FROM users WHERE username = ? COLLATE NOCASE ORDER BY updated_at DESC LIMIT 1",
+                (username,),
+            )
+            row = await cur.fetchone()
+        return row[0] if row else None
+
+    # --- Потреба в служінні ---
+
+    async def list_needs(self) -> list[Need]:
+        async with aiosqlite.connect(self.path) as db:
+            cur = await db.execute(f"{_NEED_SELECT} ORDER BY id")
+            return [Need(*row) for row in await cur.fetchall()]
+
+    async def get_need(self, need_id: int) -> Need | None:
+        async with aiosqlite.connect(self.path) as db:
+            cur = await db.execute(f"{_NEED_SELECT} WHERE id = ?", (need_id,))
+            row = await cur.fetchone()
+        return Need(*row) if row else None
+
+    async def add_need(self, title: str) -> int:
+        async with aiosqlite.connect(self.path) as db:
+            cur = await db.execute("INSERT INTO serving_needs (title) VALUES (?)", (title,))
+            await db.commit()
+            return cur.lastrowid
+
+    async def update_need(self, need_id: int, column: str, value: str | None) -> None:
+        if column not in _NEED_COLUMNS:
+            raise ValueError(column)
+        async with aiosqlite.connect(self.path) as db:
+            await db.execute(f"UPDATE serving_needs SET {column} = ? WHERE id = ?", (value, need_id))
+            await db.commit()
+
+    async def delete_need(self, need_id: int) -> None:
+        async with aiosqlite.connect(self.path) as db:
+            await db.execute("DELETE FROM serving_needs WHERE id = ?", (need_id,))
+            await db.execute("DELETE FROM serving_responses WHERE need_id = ?", (need_id,))
+            await db.commit()
+
+    async def add_response(self, user_id: int, need_id: int) -> bool:
+        """True — новий відгук; False — ця людина вже відгукувалась."""
+        async with aiosqlite.connect(self.path) as db:
+            cur = await db.execute(
+                "INSERT OR IGNORE INTO serving_responses (user_id, need_id) VALUES (?, ?)", (user_id, need_id)
+            )
+            await db.commit()
+            return cur.rowcount > 0
+
+    async def has_response(self, user_id: int, need_id: int) -> bool:
+        async with aiosqlite.connect(self.path) as db:
+            cur = await db.execute(
+                "SELECT 1 FROM serving_responses WHERE user_id = ? AND need_id = ?", (user_id, need_id)
+            )
+            return await cur.fetchone() is not None
 
 
 def _minutes(time: str | None) -> int:

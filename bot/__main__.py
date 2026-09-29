@@ -9,7 +9,17 @@ from aiogram.types import BotCommand, BotCommandScopeAllPrivateChats, BotCommand
 
 from bot.config import load_config
 from bot.db import Database
-from bot.handlers import admin, admin_events, admin_schedule, admin_settings, events_user, user
+from bot.handlers import (
+    admin,
+    admin_events,
+    admin_schedule,
+    admin_serving,
+    admin_settings,
+    events_user,
+    serving_user,
+    user,
+)
+from bot.middlewares import RememberUsers
 from bot.web import start_web
 
 
@@ -45,6 +55,9 @@ async def main() -> None:
     dp = Dispatcher(storage=MemoryStorage())
     dp["db"] = db
     dp["config"] = config
+    remember_users = RememberUsers(db)
+    dp.message.outer_middleware(remember_users)
+    dp.callback_query.outer_middleware(remember_users)
 
     # Порядок важливий: адмін-команди — раніше за обробник введення в /settings,
     # щоб команда посеред введення посилання спрацювала як команда.
@@ -54,7 +67,9 @@ async def main() -> None:
         admin_settings.create_router(config.admin_chat_id),
         admin_schedule.create_router(config.admin_chat_id),
         admin_events.create_router(config.admin_chat_id),
+        admin_serving.create_router(config.admin_chat_id),
         events_user.router,
+        serving_user.router,
         user.router,
     )
 

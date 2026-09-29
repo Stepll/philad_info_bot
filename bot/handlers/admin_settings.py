@@ -10,7 +10,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.db import Database
-from bot.handlers.admin_common import EventCb, ScheduleCb, SettingsCb, edit_screen, is_valid_url, prompts
+from bot.handlers.admin_common import EventCb, ScheduleCb, ServingCb, SettingsCb, edit_screen, is_valid_url, prompts
 from bot.render import CAPTION_LIMIT
 from bot.sections import MENU_SECTIONS, SECTIONS
 from bot.settings import SECTION_FIELDS, SECTION_URL_KEYS
@@ -46,6 +46,8 @@ def list_screen() -> tuple[str, InlineKeyboardMarkup]:
             kb.button(text=SECTIONS[key].title, callback_data=ScheduleCb(action="list"))
         elif key == "events":
             kb.button(text=SECTIONS[key].title, callback_data=EventCb(action="list"))
+        elif key == "serving":
+            kb.button(text=SECTIONS[key].title, callback_data=ServingCb(action="list"))
         else:
             kb.button(text=SECTIONS[key].title, callback_data=SettingsCb(action="open", section=key))
     kb.adjust(2)
