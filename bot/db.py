@@ -13,14 +13,11 @@ CREATE TABLE IF NOT EXISTS sections (
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
     updated_by INTEGER
 );
-CREATE TABLE IF NOT EXISTS form_submissions (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id    INTEGER NOT NULL,
-    username   TEXT,
-    name       TEXT,
-    phone      TEXT,
-    about      TEXT,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE IF NOT EXISTS settings (
+    key        TEXT PRIMARY KEY,
+    value      TEXT,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_by INTEGER
 );
 """
 
@@ -68,14 +65,22 @@ class Database:
     async def set_photo(self, key: str, photo_id: str | None, user_id: int) -> None:
         await self._upsert(key, "photo_id", photo_id, user_id)
 
-    async def add_submission(
-        self, user_id: int, username: str | None, name: str, phone: str, about: str
-    ) -> int:
+    async def get_setting(self, key: str) -> str | None:
         async with aiosqlite.connect(self.path) as db:
-            cur = await db.execute(
-                "INSERT INTO form_submissions (user_id, username, name, phone, about) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (user_id, username, name, phone, about),
+            cur = await db.execute("SELECT value FROM settings WHERE key = ?", (key,))
+            row = await cur.fetchone()
+        return row[0] if row else None
+
+    async def set_setting(self, key: str, value: str | None, user_id: int) -> None:
+        async with aiosqlite.connect(self.path) as db:
+            await db.execute(
+                """
+                INSERT INTO settings (key, value, updated_by) VALUES (?, ?, ?)
+                ON CONFLICT(key) DO UPDATE SET
+                    value = excluded.value,
+                    updated_by = excluded.updated_by,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (key, value, user_id),
             )
             await db.commit()
-            return cur.lastrowid

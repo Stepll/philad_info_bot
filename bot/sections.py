@@ -6,6 +6,8 @@ class Section:
     key: str
     title: str
     default_text: str
+    # False — вміст розділу не редагується командами /set (напр. «Давай знайомитись» — лише посилання)
+    has_content: bool = True
 
 
 _PLACEHOLDER = "Інформація незабаром з'явиться 🙏"
@@ -24,14 +26,11 @@ SECTIONS: dict[str, Section] = {
         Section("schedule", "🕐 Розклад", _PLACEHOLDER),
         Section("serving", "🙌 Потреба в служінні", _PLACEHOLDER),
         Section("donations", "💛 Пожертвування", _PLACEHOLDER),
-        Section(
-            "meet",
-            "🤝 Давай знайомитись",
-            "Ми будемо раді познайомитися з вами ближче! "
-            "Заповніть коротку анкету — і ми з вами зв'яжемося.",
-        ),
+        Section("meet", "🤝 Давай знайомитись", "", has_content=False),
     )
 }
 
 # Кнопки головного меню (welcome показується на /start, а не як кнопка)
 MENU_SECTIONS = ["events", "homegroups", "schedule", "serving", "donations", "meet"]
+
+CONTENT_SECTIONS = [key for key, s in SECTIONS.items() if s.has_content]

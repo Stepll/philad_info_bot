@@ -9,7 +9,7 @@ from aiogram.types import BotCommand, BotCommandScopeAllPrivateChats, BotCommand
 
 from bot.config import load_config
 from bot.db import Database
-from bot.handlers import admin, form, user
+from bot.handlers import admin, admin_settings, user
 
 
 async def set_commands(bot: Bot, admin_chat_id: int) -> None:
@@ -19,6 +19,7 @@ async def set_commands(bot: Bot, admin_chat_id: int) -> None:
     if admin_chat_id:
         await bot.set_my_commands(
             [
+                BotCommand(command="settings", description="Налаштування"),
                 BotCommand(command="help", description="Як керувати контентом"),
                 BotCommand(command="set", description="Замінити фото і текст (reply)"),
                 BotCommand(command="set_text", description="Замінити текст"),
@@ -44,13 +45,13 @@ async def main() -> None:
     dp["db"] = db
     dp["config"] = config
 
-    # Порядок важливий: user.router має fallback, тому form.router — після нього,
-    # а fallback обмежено станом None, щоб не перехоплювати відповіді в анкеті.
+    # Порядок важливий: адмін-команди — раніше за обробник введення в /settings,
+    # щоб команда посеред введення посилання спрацювала як команда.
     dp.include_routers(
         admin.common_router,
         admin.create_router(config.admin_chat_id),
+        admin_settings.create_router(config.admin_chat_id),
         user.router,
-        form.router,
     )
 
     await set_commands(bot, config.admin_chat_id)

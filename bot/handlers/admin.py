@@ -4,11 +4,13 @@ from aiogram.types import Message
 
 from bot.db import Database
 from bot.render import send_section
-from bot.sections import SECTIONS
+from bot.sections import CONTENT_SECTIONS, SECTIONS
 
 HELP_TEXT = """<b>Керування контентом</b>
 
-Розділи: {sections}
+/settings — меню налаштувань (посилання на форму «Давай знайомитись» тощо)
+
+Розділи з контентом: {sections}
 
 <b>Як оновити розділ</b>
 Надішліть у цю групу повідомлення (фото з підписом або просто текст), а потім <b>дайте на нього відповідь (reply)</b> командою:
@@ -30,7 +32,7 @@ HELP_TEXT = """<b>Керування контентом</b>
 
 
 def _sections_list() -> str:
-    return "\n".join(f"• <code>{s.key}</code> — {s.title}" for s in SECTIONS.values())
+    return "\n".join(f"• <code>{key}</code> — {SECTIONS[key].title}" for key in CONTENT_SECTIONS)
 
 
 def _parse_key(command: CommandObject) -> tuple[str | None, str | None]:
@@ -39,7 +41,7 @@ def _parse_key(command: CommandObject) -> tuple[str | None, str | None]:
         return None, None
     parts = command.args.split(maxsplit=1)
     key = parts[0].lower()
-    if key not in SECTIONS:
+    if key not in CONTENT_SECTIONS:
         return None, None
     return key, parts[1] if len(parts) > 1 else None
 
@@ -79,7 +81,7 @@ def create_router(admin_chat_id: int) -> Router:
 
     @router.message(Command("help", "start"))
     async def cmd_help(message: Message) -> None:
-        await message.answer(HELP_TEXT.format(sections=", ".join(SECTIONS)))
+        await message.answer(HELP_TEXT.format(sections=", ".join(CONTENT_SECTIONS)))
 
     @router.message(Command("sections"))
     async def cmd_sections(message: Message) -> None:
