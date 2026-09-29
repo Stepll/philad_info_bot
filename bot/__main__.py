@@ -10,6 +10,7 @@ from aiogram.types import BotCommand, BotCommandScopeAllPrivateChats, BotCommand
 from bot.config import load_config
 from bot.db import Database
 from bot.handlers import admin, admin_events, admin_schedule, admin_settings, events_user, user
+from bot.web import start_web
 
 
 async def set_commands(bot: Bot, admin_chat_id: int) -> None:
@@ -59,7 +60,13 @@ async def main() -> None:
 
     await set_commands(bot, config.admin_chat_id)
     await bot.delete_webhook(drop_pending_updates=True)
-    await dp.start_polling(bot)
+
+    web_runner = await start_web(db, config) if config.public_url else None
+    try:
+        await dp.start_polling(bot)
+    finally:
+        if web_runner:
+            await web_runner.cleanup()
 
 
 if __name__ == "__main__":

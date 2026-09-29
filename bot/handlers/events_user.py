@@ -7,14 +7,22 @@ from html import escape
 from aiogram import F, Router
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters.callback_data import CallbackData
-from aiogram.types import BufferedInputFile, CallbackQuery, InlineKeyboardMarkup, InputMediaPhoto, Message
+from aiogram.types import (
+    BufferedInputFile,
+    CallbackQuery,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    InputMediaPhoto,
+    Message,
+)
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.config import Config
 from bot.db import Database
 from bot.events import KEEP_PAST_DAYS, Event, build_ics, caption, google_calendar_url, ics_filename
-from bot.keyboards import main_menu_kb, url_button_kb
+from bot.keyboards import main_menu_kb
 from bot.sections import SECTIONS
+from bot.web import calendar_url
 
 NO_EVENTS = "Найближчих подій поки немає 🙏"
 
@@ -105,15 +113,26 @@ async def on_calendar(callback: CallbackQuery, callback_data: EventNav, db: Data
     await callback.answer()
     await db.mark_in_calendar(callback.from_user.id, event.id)
 
-    await callback.message.answer_document(
-        BufferedInputFile(build_ics(event), filename=ics_filename(event)),
-        caption=(
-            f"📅 <b>{escape(event.title)}</b>\n\n"
-            "Відкрийте файл, щоб додати подію в календар телефону.\n"
-            "Якщо файл не відкривається — скористайтеся Google Calendar 👇"
-        ),
-        reply_markup=url_button_kb("📆 Google Calendar", google_calendar_url(event)),
-    )
+    title = f"📅 <b>{escape(event.title)}</b>\n\n"
+    google = InlineKeyboardButton(text="📆 Android / Google Calendar", url=google_calendar_url(event))
+    if config.public_url:
+        # iPhone додає подію, лише якщо .ics відкрито в браузері — тому посилання на наш сервер
+        await callback.message.answer(
+            title + "Оберіть свій календар 👇",
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [InlineKeyboardButton(text="🍏 iPhone / Apple Calendar", url=calendar_url(config, event))],
+                    [google],
+                ]
+            ),
+        )
+    else:
+        await callback.message.answer_document(
+            BufferedInputFile(build_ics(event), filename=ics_filename(event)),
+            caption=title + "Відкрийте файл, щоб додати подію в календар телефону.\n"
+            "Якщо файл не відкривається — скористайтеся Google Calendar 👇",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[google]]),
+        )
 
     # Оновлюємо кнопку на постері: «✅ У календарі»
     events = await _upcoming(db, config)

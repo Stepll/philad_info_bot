@@ -21,6 +21,17 @@ cp .env.example .env   # вписати BOT_TOKEN і ADMIN_CHAT_ID
 
 Команди приймаються **лише** з цієї групи.
 
+## Кнопка «Додати в календар» на iPhone
+
+iPhone пропонує додати подію в календар, лише коли .ics відкривається в браузері, тому бот віддає його за посиланням.
+
+1. Домен, що вказує на сервер (напр. безкоштовний `philad.duckdns.org` на duckdns.org).
+2. nginx: скопіюйте `deploy/nginx-philad-bot.conf` у `/etc/nginx/sites-available/`, замініть `DOMAIN`, увімкніть і отримайте сертифікат через `certbot --nginx`.
+3. У `.env`: `PUBLIC_URL=https://philad.duckdns.org` і перезапустіть бота.
+4. Перевірка: `curl https://philad.duckdns.org/cal/health` → `ok`.
+
+Без `PUBLIC_URL` бот надсилає .ics-файлом (на iPhone з Telegram його не додати — лишається кнопка Google Calendar).
+
 ## Налаштування (`/settings`)
 
 Бот надсилає меню з розділами; натискаючи кнопки, можна перейти до налаштувань розділу і назад.
@@ -54,6 +65,8 @@ cp .env.example .env   # вписати BOT_TOKEN і ADMIN_CHAT_ID
 ## Структура
 
 ```
+deploy/
+  nginx-philad-bot.conf  приклад конфігурації nginx
 bot/
   __main__.py      точка входу
   config.py        змінні оточення
@@ -61,6 +74,7 @@ bot/
   settings.py      ключі налаштувань і що редагується в /settings
   db.py            SQLite (контент розділів, налаштування)
   events.py        події: підпис, .ics-файл, посилання Google Calendar
+  web.py           HTTP-сервер для .ics-посилань (/cal/…)
   schedule.py      розклад: дні, кольори, стартові дані
   schedule_image.py  генерація картинки розкладу (Pillow, шрифт Inter в assets/fonts)
   keyboards.py     клавіатури
