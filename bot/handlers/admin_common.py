@@ -2,6 +2,7 @@
 
 from contextlib import suppress
 from dataclasses import dataclass, field
+from urllib.parse import urlparse
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest
@@ -23,6 +24,18 @@ class ScheduleCb(CallbackData, prefix="sc"):
     action: str
     item: int = 0
     value: str = ""
+
+
+class EventCb(CallbackData, prefix="ev"):
+    # list | open | add | edit | clear | skip | delete | delete_yes | preview | cancel_input
+    action: str
+    event: int = 0
+    value: str = ""  # поле: poster | text | date | time | place | url
+
+
+def is_valid_url(value: str) -> bool:
+    parsed = urlparse(value)
+    return parsed.scheme in ("http", "https") and bool(parsed.netloc) and " " not in value
 
 
 async def edit_screen(bot: Bot, chat_id: int, message_id: int, screen: Screen) -> None:

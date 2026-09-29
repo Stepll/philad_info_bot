@@ -1,8 +1,10 @@
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 
 import aiosqlite
 
+from bot.events import Event
 from bot.schedule import SEED, ScheduleItem
 from bot.sections import SECTIONS
 
@@ -27,7 +29,26 @@ CREATE TABLE IF NOT EXISTS schedule_items (
     title TEXT NOT NULL,
     color TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS events (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    poster_id  TEXT NOT NULL,
+    text       TEXT NOT NULL DEFAULT '',
+    date       TEXT,
+    time       TEXT,
+    place      TEXT,
+    url        TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS event_calendar (
+    user_id    INTEGER NOT NULL,
+    event_id   INTEGER NOT NULL,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, event_id)
+);
 """
+
+_EVENT_COLUMNS = {"poster_id", "text", "date", "time", "place", "url"}
+_EVENT_SELECT = "SELECT id, poster_id, text, date, time, place, url FROM events"
 
 _SCHEDULE_SEEDED = "schedule_seeded"
 _SCHEDULE_COLUMNS = {"day", "time", "title", "color"}
@@ -138,3 +159,77 @@ class Database:
         async with aiosqlite.connect(self.path) as db:
             await db.execute("DELETE FROM schedule_items WHERE id = ?", (item_id,))
             await db.commit()
+
+    # --- Події ---
+
+    async def list_events(self) -> list[Event]:
+        """Усі події: чернетки (без дати) першими, далі за датою і часом."""
+        async with aiosqlite.connect(self.path) as db:
+            cur = await db.execute(_EVENT_SELECT)
+            rows = await cur.fetchall()
+        events = [Event(*row) for row in rows]
+        return sorted(events, key=lambda e: (e.date is not None, e.date or "", _minutes(e.time), e.id))
+
+    async def upcoming_events(self, today: date) -> list[Event]:
+        return [e for e in await self.list_events() if e.day and e.day >= today]
+
+    async def get_event(self, event_id: int) -> Event | None:
+        async with aiosqlite.connect(self.path) as db:
+            cur = await db.execute(f"{_EVENT_SELECT} WHERE id = ?", (event_id,))
+            row = await cur.fetchone()
+        return Event(*row) if row else None
+
+    async def add_event(self, poster_id: str) -> int:
+        async with aiosqlite.connect(self.path) as db:
+            cur = await db.execute("INSERT INTO events (poster_id) VALUES (?)", (poster_id,))
+            await db.commit()
+            return cur.lastrowid
+
+    async def update_event(self, event_id: int, column: str, value: str | None) -> None:
+        if column not in _EVENT_COLUMNS:
+            raise ValueError(column)
+        async with aiosqlite.connect(self.path) as db:
+            await db.execute(f"UPDATE events SET {column} = ? WHERE id = ?", (value, event_id))
+            await db.commit()
+
+    async def delete_event(self, event_id: int) -> None:
+        async with aiosqlite.connect(self.path) as db:
+            await db.execute("DELETE FROM events WHERE id = ?", (event_id,))
+            await db.execute("DELETE FROM event_calendar WHERE event_id = ?", (event_id,))
+            await db.commit()
+
+    async def purge_events_before(self, cutoff: date) -> None:
+        """Видаляє події, що минули до cutoff (разом з відмітками «в календарі»)."""
+        async with aiosqlite.connect(self.path) as db:
+            await db.execute(
+                "DELETE FROM event_calendar WHERE event_id IN (SELECT id FROM events WHERE date < ?)",
+                (cutoff.isoformat(),),
+            )
+            await db.execute("DELETE FROM events WHERE date < ?", (cutoff.isoformat(),))
+            await db.commit()
+
+    async def mark_in_calendar(self, user_id: int, event_id: int) -> None:
+        async with aiosqlite.connect(self.path) as db:
+            await db.execute(
+                "INSERT OR IGNORE INTO event_calendar (user_id, event_id) VALUES (?, ?)", (user_id, event_id)
+            )
+            await db.commit()
+
+    async def is_in_calendar(self, user_id: int, event_id: int) -> bool:
+        async with aiosqlite.connect(self.path) as db:
+            cur = await db.execute(
+                "SELECT 1 FROM event_calendar WHERE user_id = ? AND event_id = ?", (user_id, event_id)
+            )
+            return await cur.fetchone() is not None
+
+    async def calendar_count(self, event_id: int) -> int:
+        async with aiosqlite.connect(self.path) as db:
+            cur = await db.execute("SELECT COUNT(*) FROM event_calendar WHERE event_id = ?", (event_id,))
+            return (await cur.fetchone())[0]
+
+
+def _minutes(time: str | None) -> int:
+    if not time:
+        return -1
+    h, m = time.split(":")
+    return int(h) * 60 + int(m)

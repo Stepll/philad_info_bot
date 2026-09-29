@@ -2,7 +2,6 @@
 
 from contextlib import suppress
 from html import escape
-from urllib.parse import urlparse
 
 from aiogram import F, Router
 from aiogram.exceptions import TelegramBadRequest
@@ -11,7 +10,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.db import Database
-from bot.handlers.admin_common import ScheduleCb, SettingsCb, edit_screen, prompts
+from bot.handlers.admin_common import EventCb, ScheduleCb, SettingsCb, edit_screen, is_valid_url, prompts
 from bot.render import CAPTION_LIMIT
 from bot.sections import MENU_SECTIONS, SECTIONS
 from bot.settings import SECTION_FIELDS, SECTION_URL_KEYS
@@ -45,6 +44,8 @@ def list_screen() -> tuple[str, InlineKeyboardMarkup]:
     for key in MENU_SECTIONS:
         if key == "schedule":
             kb.button(text=SECTIONS[key].title, callback_data=ScheduleCb(action="list"))
+        elif key == "events":
+            kb.button(text=SECTIONS[key].title, callback_data=EventCb(action="list"))
         else:
             kb.button(text=SECTIONS[key].title, callback_data=SettingsCb(action="open", section=key))
     kb.adjust(2)
@@ -107,11 +108,6 @@ def _waiting_screen(key: str, field: str) -> tuple[str, InlineKeyboardMarkup]:
     kb = InlineKeyboardBuilder()
     kb.button(text="⬅️ Назад", callback_data=SettingsCb(action="cancel_input", section=key))
     return _header(key) + FIELD_WAITING[field], kb.as_markup()
-
-
-def _is_valid_url(value: str) -> bool:
-    parsed = urlparse(value)
-    return parsed.scheme in ("http", "https") and bool(parsed.netloc) and " " not in value
 
 
 # --- Роутер ------------------------------------------------------------------
@@ -202,7 +198,7 @@ def create_router(admin_chat_id: int) -> Router:
 
         elif field == "url":
             url = (message.text or "").strip()
-            if not _is_valid_url(url):
+            if not is_valid_url(url):
                 return await retry("Це не схоже на посилання. Воно має починатися з https://")
             await db.set_setting(SECTION_URL_KEYS[section], url, user_id)
 

@@ -21,7 +21,8 @@ SECTIONS: dict[str, Section] = {
             "Вітаємо! Тут ви знайдете всю актуальну інформацію нашої церкви.\n\n"
             "Оберіть розділ нижче 👇",
         ),
-        Section("events", "📅 Події", _PLACEHOLDER),
+        # Події — постери з гортанням, редагуються в /settings
+        Section("events", "📅 Події", "", has_content=False),
         Section("homegroups", "🏠 Домашні групи", _PLACEHOLDER),
         # Розклад — згенерована картинка, редагується блоками в /settings
         Section("schedule", "🕐 Розклад", "", has_content=False),

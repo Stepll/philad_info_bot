@@ -1,6 +1,8 @@
 import logging
 import os
 from dataclasses import dataclass
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
 
@@ -12,6 +14,10 @@ class Config:
     bot_token: str
     admin_chat_id: int  # 0 = ще не налаштовано
     db_path: str
+    timezone: str  # для визначення «сьогодні» (які події вже минули)
+
+    def today(self) -> date:
+        return datetime.now(ZoneInfo(self.timezone)).date()
 
 
 def load_config() -> Config:
@@ -32,4 +38,5 @@ def load_config() -> Config:
         bot_token=token,
         admin_chat_id=admin_chat_id,
         db_path=os.getenv("DB_PATH", "data/bot.db"),
+        timezone=os.getenv("TIMEZONE", "Europe/Kyiv"),
     )
