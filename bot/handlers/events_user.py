@@ -22,7 +22,7 @@ from bot.db import Database
 from bot.events import KEEP_PAST_DAYS, Event, build_ics, caption, google_calendar_url, ics_filename
 from bot.keyboards import main_menu_kb
 from bot.sections import SECTIONS
-from bot.web import calendar_url
+from bot.web import picker_urls
 
 NO_EVENTS = "Найближчих подій поки немає 🙏"
 
@@ -114,21 +114,29 @@ async def on_calendar(callback: CallbackQuery, callback_data: EventNav, db: Data
     await db.mark_in_calendar(callback.from_user.id, event.id)
 
     title = f"📅 <b>{escape(event.title)}</b>\n\n"
-    google = InlineKeyboardButton(text="📆 Android / Google Calendar", url=google_calendar_url(event))
+    google_label = "📆 Android / Google Calendar"
     if config.public_url:
-        # iPhone додає подію, лише якщо .ics відкрито в браузері — тому посилання на наш сервер
-        await callback.message.answer(
+        # iPhone додає подію, лише якщо .ics відкрито в браузері — тому посилання на наш сервер.
+        # Посилання містять id цього повідомлення, щоб сервер прибрав його після натискання,
+        # тож спершу надсилаємо повідомлення, а кнопки додаємо слідом.
+        picker = await callback.message.answer(
             title + "Оберіть свій календар 👇\n\n"
             "<i>На iPhone сторінка відкриється в браузері Telegram — натисніть на ній «Відкрити в Safari», "
-            "а потім «Додати в календар».</i>",
+            "а потім «Додати в календар».</i>"
+        )
+        apple_url, google_url = picker_urls(config, event, picker.chat.id, picker.message_id)
+        await callback.bot.edit_message_reply_markup(
+            chat_id=picker.chat.id,
+            message_id=picker.message_id,
             reply_markup=InlineKeyboardMarkup(
                 inline_keyboard=[
-                    [InlineKeyboardButton(text="🍏 iPhone / Apple Calendar", url=calendar_url(config, event))],
-                    [google],
+                    [InlineKeyboardButton(text="🍏 iPhone / Apple Calendar", url=apple_url)],
+                    [InlineKeyboardButton(text=google_label, url=google_url)],
                 ]
-            ),
+            )
         )
     else:
+        google = InlineKeyboardButton(text=google_label, url=google_calendar_url(event))
         await callback.message.answer_document(
             BufferedInputFile(build_ics(event), filename=ics_filename(event)),
             caption=title + "Відкрийте файл, щоб додати подію в календар телефону.\n"

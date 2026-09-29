@@ -5,15 +5,21 @@ iPhone додає подію з .ics лише в справжньому Safari. 
 події з кнопкою «Відкрити в Safari» (x-safari-https://, iOS 17+) і «Додати в календар».
 """
 
+import asyncio
+import hashlib
+import hmac
 import json
 import logging
+from contextlib import suppress
 from html import escape
 
+from aiogram import Bot
+from aiogram.exceptions import TelegramAPIError
 from aiohttp import web
 
 from bot.config import Config
 from bot.db import Database
-from bot.events import Event, build_ics, format_date, ics_filename
+from bot.events import Event, build_ics, format_date, google_calendar_url, ics_filename
 
 log = logging.getLogger(__name__)
 
@@ -23,6 +29,39 @@ CAL_PATH = "/cal"
 def calendar_url(config: Config, event: Event) -> str:
     """Сторінка події (з неї — в Safari і в календар)."""
     return f"{config.public_url}{CAL_PATH}/{event.id}"
+
+
+# --- Прибирання повідомлення з вибором календаря ---------------------------
+# Telegram не повідомляє боту про натискання кнопки-посилання, тому посилання
+# несуть підписаний параметр ?m=<chat>.<message>.<підпис>: відкривши його, сервер
+# видаляє те повідомлення. Підпис не дає видаляти довільні повідомлення.
+
+
+def _sign(config: Config, chat_id: int, message_id: int) -> str:
+    key = hashlib.sha256(f"cal-msg:{config.bot_token}".encode()).digest()
+    return hmac.new(key, f"{chat_id}.{message_id}".encode(), hashlib.sha256).hexdigest()[:16]
+
+
+def message_token(config: Config, chat_id: int, message_id: int) -> str:
+    return f"{chat_id}.{message_id}.{_sign(config, chat_id, message_id)}"
+
+
+def _parse_token(config: Config, token: str) -> tuple[int, int] | None:
+    try:
+        chat, message, sig = token.split(".")
+        chat_id, message_id = int(chat), int(message)
+    except ValueError:
+        return None
+    if not hmac.compare_digest(sig, _sign(config, chat_id, message_id)):
+        return None
+    return chat_id, message_id
+
+
+def picker_urls(config: Config, event: Event, chat_id: int, message_id: int) -> tuple[str, str]:
+    """(iPhone, Google) — обидва через наш сервер, щоб прибрати повідомлення після натискання."""
+    m = message_token(config, chat_id, message_id)
+    page = calendar_url(config, event)
+    return f"{page}?m={m}", f"{page}/google?m={m}"
 
 
 _PAGE = """<!doctype html>
@@ -102,7 +141,13 @@ def _page(config: Config, event: Event, in_safari: bool) -> str:
     )
 
 
-def create_app(db: Database, config: Config) -> web.Application:
+def create_app(bot: Bot, db: Database, config: Config) -> web.Application:
+    async def delete_picker(request: web.Request) -> None:
+        parsed = _parse_token(config, request.query.get("m", ""))
+        if parsed:
+            with suppress(TelegramAPIError):
+                await bot.delete_message(*parsed)
+
     async def health(_: web.Request) -> web.Response:
         return web.Response(text="ok")
 
@@ -118,8 +163,14 @@ def create_app(db: Database, config: Config) -> web.Application:
 
     async def event_page(request: web.Request) -> web.Response:
         event = await actual_event(request)
+        asyncio.create_task(delete_picker(request))
         in_safari = request.query.get("auto") == "1"
         return web.Response(text=_page(config, event, in_safari), content_type="text/html", charset="utf-8")
+
+    async def google(request: web.Request) -> web.Response:
+        event = await actual_event(request)
+        asyncio.create_task(delete_picker(request))
+        raise web.HTTPFound(google_calendar_url(event))
 
     async def event_ics(request: web.Request) -> web.Response:
         event = await actual_event(request)
@@ -133,12 +184,13 @@ def create_app(db: Database, config: Config) -> web.Application:
     app = web.Application()
     app.router.add_get(f"{CAL_PATH}/health", health)
     app.router.add_get(CAL_PATH + "/{event_id}.ics", event_ics)
+    app.router.add_get(CAL_PATH + "/{event_id}/google", google)
     app.router.add_get(CAL_PATH + "/{event_id}", event_page)
     return app
 
 
-async def start_web(db: Database, config: Config) -> web.AppRunner:
-    runner = web.AppRunner(create_app(db, config), access_log=None)
+async def start_web(bot: Bot, db: Database, config: Config) -> web.AppRunner:
+    runner = web.AppRunner(create_app(bot, db, config), access_log=None)
     await runner.setup()
     await web.TCPSite(runner, config.web_host, config.web_port).start()
     log.info("Календарні посилання: %s%s/… (слухаю %s:%s)", config.public_url, CAL_PATH, config.web_host, config.web_port)

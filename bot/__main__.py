@@ -68,7 +68,7 @@ async def main() -> None:
     if config.public_url:
         # Помилка вебсервера (напр. зайнятий порт) не повинна зупиняти бота
         try:
-            web_runner = await start_web(db, config)
+            web_runner = await start_web(bot, db, config)
         except OSError:
             logging.exception(
                 "Не вдалося запустити вебсервер на %s:%s — календарні посилання не працюватимуть",
