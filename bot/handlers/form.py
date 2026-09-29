@@ -6,7 +6,7 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
+from aiogram.types import CallbackQuery, Message
 
 from bot.config import Config
 from bot.db import Database
@@ -19,7 +19,6 @@ from bot.keyboards import (
     main_menu_kb,
     phone_kb,
 )
-from bot.render import send_section
 
 router = Router(name="form")
 router.message.filter(F.chat.type == "private")
@@ -49,13 +48,12 @@ async def form_start(callback: CallbackQuery, state: FSMContext) -> None:
 
 
 @router.callback_query(FormCb.filter(F.action == "cancel"))
-async def form_cancel(callback: CallbackQuery, state: FSMContext, db: Database) -> None:
+async def form_cancel(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer("Скасовано")
     await state.clear()
     with suppress(TelegramBadRequest):
         await callback.message.delete()
-    await callback.message.answer("Анкету скасовано.", reply_markup=ReplyKeyboardRemove())
-    await send_section(callback.bot, callback.message.chat.id, db, "welcome", main_menu_kb())
+    await callback.message.answer("Анкету скасовано.", reply_markup=main_menu_kb())
 
 
 @router.message(MeetForm.name, F.text)
@@ -81,7 +79,7 @@ async def form_phone(message: Message, state: FSMContext) -> None:
 
     await state.update_data(phone=phone)
     await state.set_state(MeetForm.about)
-    await message.answer("Дякуємо!", reply_markup=ReplyKeyboardRemove())
+    await message.answer("Дякуємо!", reply_markup=main_menu_kb())
     await message.answer(
         "Розкажіть трохи про себе: як дізналися про церкву, "
         "чи хотіли б долучитися до домашньої групи або служіння, "
@@ -141,8 +139,9 @@ async def form_send(callback: CallbackQuery, state: FSMContext, db: Database, co
 
     with suppress(TelegramBadRequest):
         await callback.message.edit_reply_markup(reply_markup=None)
-    await callback.message.answer("Дякуємо! 🙏 Ми з вами зв'яжемося найближчим часом.")
-    await send_section(callback.bot, callback.message.chat.id, db, "welcome", main_menu_kb())
+    await callback.message.answer(
+        "Дякуємо! 🙏 Ми з вами зв'яжемося найближчим часом.", reply_markup=main_menu_kb()
+    )
 
 
 @router.message(StateFilter(MeetForm))

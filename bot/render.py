@@ -1,5 +1,5 @@
 from aiogram import Bot
-from aiogram.types import InlineKeyboardMarkup
+from aiogram.types import InlineKeyboardMarkup, ReplyKeyboardMarkup
 
 from bot.db import Database
 
@@ -11,7 +11,7 @@ async def send_section(
     chat_id: int,
     db: Database,
     key: str,
-    markup: InlineKeyboardMarkup | None = None,
+    markup: InlineKeyboardMarkup | ReplyKeyboardMarkup | None = None,
 ) -> None:
     """Надсилає розділ: фото з підписом, або фото + окремий текст, якщо текст задовгий."""
     content = await db.get_section(key)

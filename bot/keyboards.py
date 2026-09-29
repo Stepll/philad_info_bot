@@ -5,39 +5,31 @@ from aiogram.types import (
     KeyboardButton,
     ReplyKeyboardMarkup,
 )
-from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.utils.keyboard import ReplyKeyboardBuilder
 
 from bot.sections import MENU_SECTIONS, SECTIONS
-
-
-class Nav(CallbackData, prefix="nav"):
-    section: str  # ключ розділу або "menu"
 
 
 class FormCb(CallbackData, prefix="form"):
     action: str  # start | skip | send | restart | cancel
 
 
-BACK_BUTTON = InlineKeyboardButton(text="⬅️ Меню", callback_data=Nav(section="menu").pack())
+# Текст кнопки -> ключ розділу
+MENU_BUTTONS = {SECTIONS[key].title: key for key in MENU_SECTIONS}
 
 
-def main_menu_kb() -> InlineKeyboardMarkup:
-    kb = InlineKeyboardBuilder()
-    for key in MENU_SECTIONS:
-        kb.button(text=SECTIONS[key].title, callback_data=Nav(section=key))
+def main_menu_kb() -> ReplyKeyboardMarkup:
+    kb = ReplyKeyboardBuilder()
+    for title in MENU_BUTTONS:
+        kb.button(text=title)
     kb.adjust(2)
-    return kb.as_markup()
-
-
-def back_kb() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[[BACK_BUTTON]])
+    return kb.as_markup(resize_keyboard=True, is_persistent=True)
 
 
 def meet_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="📝 Заповнити анкету", callback_data=FormCb(action="start").pack())],
-            [BACK_BUTTON],
         ]
     )
 

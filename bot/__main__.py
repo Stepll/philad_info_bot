@@ -5,7 +5,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import BotCommand, BotCommandScopeAllPrivateChats, BotCommandScopeChat
+from aiogram.types import BotCommand, BotCommandScopeAllPrivateChats, BotCommandScopeChat, BotCommandScopeDefault
 
 from bot.config import load_config
 from bot.db import Database
@@ -13,13 +13,9 @@ from bot.handlers import admin, form, user
 
 
 async def set_commands(bot: Bot, admin_chat_id: int) -> None:
-    await bot.set_my_commands(
-        [
-            BotCommand(command="start", description="Головне меню"),
-            BotCommand(command="menu", description="Головне меню"),
-        ],
-        scope=BotCommandScopeAllPrivateChats(),
-    )
+    # Звичайні користувачі користуються лише клавіатурою — список команд прибираємо
+    await bot.delete_my_commands(scope=BotCommandScopeDefault())
+    await bot.delete_my_commands(scope=BotCommandScopeAllPrivateChats())
     if admin_chat_id:
         await bot.set_my_commands(
             [
