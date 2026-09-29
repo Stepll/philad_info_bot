@@ -1,0 +1,35 @@
+import logging
+import os
+from dataclasses import dataclass
+
+from dotenv import load_dotenv
+
+log = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class Config:
+    bot_token: str
+    admin_chat_id: int  # 0 = ще не налаштовано
+    db_path: str
+
+
+def load_config() -> Config:
+    load_dotenv()
+
+    token = os.getenv("BOT_TOKEN")
+    if not token:
+        raise RuntimeError("BOT_TOKEN не задано (див. .env.example)")
+
+    admin_chat_id = int(os.getenv("ADMIN_CHAT_ID") or 0)
+    if not admin_chat_id:
+        log.warning(
+            "ADMIN_CHAT_ID не задано — адмін-команди вимкнені. "
+            "Додайте бота в групу адмінів і надішліть /chat_id"
+        )
+
+    return Config(
+        bot_token=token,
+        admin_chat_id=admin_chat_id,
+        db_path=os.getenv("DB_PATH", "data/bot.db"),
+    )
