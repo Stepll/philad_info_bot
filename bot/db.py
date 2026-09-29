@@ -42,7 +42,8 @@ class Database:
         async with aiosqlite.connect(self.path) as db:
             cur = await db.execute("SELECT text, photo_id FROM sections WHERE key = ?", (key,))
             row = await cur.fetchone()
-        text = row[0] if row and row[0] else SECTIONS[key].default_text
+        # NULL — стандартний текст; порожній рядок — текст видалено адміном
+        text = row[0] if row and row[0] is not None else SECTIONS[key].default_text
         return SectionContent(text=text, photo_id=row[1] if row else None)
 
     async def _upsert(self, key: str, column: str, value: str | None, user_id: int) -> None:

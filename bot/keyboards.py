@@ -15,7 +15,5 @@ def main_menu_kb() -> ReplyKeyboardMarkup:
     return kb.as_markup(resize_keyboard=True, is_persistent=True)
 
 
-def meet_form_kb(url: str) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[[InlineKeyboardButton(text="📝 Заповнити анкету", url=url)]]
-    )
+def url_button_kb(text: str, url: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=text, url=url)]])
