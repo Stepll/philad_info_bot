@@ -16,6 +16,7 @@ SECTION_URL_BUTTONS = {
 
 # Які елементи розділу редагуються через /settings
 SECTION_FIELDS: dict[str, tuple[str, ...]] = {
+    "welcome": ("photo", "text"),
     "meet": ("url",),
     "donations": ("photo", "text", "url"),
     "homegroups": ("photo", "text", "url"),

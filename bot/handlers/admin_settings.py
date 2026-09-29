@@ -41,6 +41,7 @@ FIELD_SAVED = {"photo": "✅ Фото збережено.", "text": "✅ Тек�
 
 def list_screen() -> tuple[str, InlineKeyboardMarkup]:
     kb = InlineKeyboardBuilder()
+    kb.button(text=SECTIONS["welcome"].title, callback_data=SettingsCb(action="open", section="welcome"))
     for key in MENU_SECTIONS:
         if key == "schedule":
             kb.button(text=SECTIONS[key].title, callback_data=ScheduleCb(action="list"))
@@ -50,7 +51,7 @@ def list_screen() -> tuple[str, InlineKeyboardMarkup]:
             kb.button(text=SECTIONS[key].title, callback_data=ServingCb(action="list"))
         else:
             kb.button(text=SECTIONS[key].title, callback_data=SettingsCb(action="open", section=key))
-    kb.adjust(2)
+    kb.adjust(1, 2)
     return "⚙️ <b>Налаштування</b>\n\nОберіть розділ:", kb.as_markup()
 
 
