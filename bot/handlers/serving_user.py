@@ -29,16 +29,10 @@ class NeedNav(CallbackData, prefix="svu"):
 
 def list_view(needs: list[Need]) -> tuple[str, InlineKeyboardMarkup]:
     kb = InlineKeyboardBuilder()
-    lines = []
     for need in needs:
-        line = f"<b>{escape(need.title)}</b>"
-        if need.summary:
-            line += f" — {need.summary}"
-        lines.append(line)
         kb.button(text=need.title, callback_data=NeedNav(action="open", need=need.id))
     kb.adjust(1)
-    text = HEADER + "\n\n".join(lines) + "\n\nОберіть, де хотіли б послужити 👇"
-    return text, kb.as_markup()
+    return HEADER + "Оберіть, де хотіли б послужити 👇", kb.as_markup()
 
 
 def need_view(need: Need, joined: bool) -> tuple[str, InlineKeyboardMarkup]:

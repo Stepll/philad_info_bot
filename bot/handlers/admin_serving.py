@@ -11,21 +11,17 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from bot.db import Database
 from bot.handlers.admin_common import Screen, ServingCb, SettingsCb, edit_screen, prompts
 from bot.handlers.serving_user import need_view
-from bot.serving import DESCRIPTION_MAX_LEN, SUMMARY_MAX_LEN, TITLE_MAX_LEN, Need, parse_username
+from bot.serving import DESCRIPTION_MAX_LEN, TITLE_MAX_LEN, Need, parse_username
 
 HEADER = "⚙️ <b>🙌 Потреба в служінні</b>\n\n"
 
 # Кроки додавання; відповідального можна пропустити
-ADD_FLOW = ["title", "summary", "description", "responsible"]
+ADD_FLOW = ["title", "description", "responsible"]
 
 PROMPT = {
     "title": (f"✏️ Надішліть у відповідь назву служіння (до {TITLE_MAX_LEN} символів). Можна з емодзі.", "🎸 Прославлення"),
-    "summary": (
-        f"📝 Надішліть у відповідь короткий опис для загального списку (до {SUMMARY_MAX_LEN} символів).",
-        "Потрібні гітарист і клавішник",
-    ),
     "description": (
-        "📄 Надішліть у відповідь повний опис — його побачать, відкривши це служіння. Форматування збережеться.",
+        "📄 Надішліть у відповідь опис — його побачать, відкривши це служіння. Форматування збережеться.",
         "Детальний опис…",
     ),
     "responsible": (
@@ -36,14 +32,12 @@ PROMPT = {
 }
 WAITING = {
     "title": "✏️ Очікую назву…",
-    "summary": "📝 Очікую короткий опис…",
-    "description": "📄 Очікую повний опис…",
+    "description": "📄 Очікую опис…",
     "responsible": "👤 Очікую відповідального…",
 }
 SAVED = {
     "title": "✅ Назву змінено.",
-    "summary": "✅ Короткий опис змінено.",
-    "description": "✅ Повний опис змінено.",
+    "description": "✅ Опис змінено.",
     "responsible": "✅ Відповідального змінено.",
 }
 
@@ -66,12 +60,12 @@ def _list_screen(needs: list[Need], note: str = "") -> Screen:
 
 async def _need_screen(db: Database, need: Need, note: str = "") -> Screen:
     kb = InlineKeyboardBuilder()
-    for label, field in (("✏️ Назва", "title"), ("📝 Коротко", "summary"), ("📄 Опис", "description"), ("👤 Відповідальний", "responsible")):
+    for label, field in (("✏️ Назва", "title"), ("📄 Опис", "description"), ("👤 Відповідальний", "responsible")):
         kb.button(text=label, callback_data=ServingCb(action="edit", need=need.id, value=field))
     kb.button(text="👁 Переглянути", callback_data=ServingCb(action="preview", need=need.id))
     kb.button(text="🗑 Видалити", callback_data=ServingCb(action="delete", need=need.id))
     kb.button(text="⬅️ До потреб", callback_data=ServingCb(action="list"))
-    kb.adjust(2, 2, 2, 1)
+    kb.adjust(3, 2, 1)
 
     none = "<i>не задано</i>"
     if need.responsible:
@@ -84,7 +78,6 @@ async def _need_screen(db: Database, need: Need, note: str = "") -> Screen:
     text = (
         f"{HEADER}<b>{escape(need.title)}</b>\n\n"
         f"👤 <b>Відповідальний:</b> {responsible}\n\n"
-        f"📝 <b>Коротко:</b> {need.summary or none}\n\n"
         f"📄 <b>Опис:</b>\n{need.description or none}"
     )
     if note:
@@ -217,11 +210,10 @@ def create_router(admin_chat_id: int) -> Router:
                 await db.update_need(need.id, "title", value)
             else:
                 need_id = await db.add_need(value)
-        elif field in ("summary", "description"):
-            limit = SUMMARY_MAX_LEN if field == "summary" else DESCRIPTION_MAX_LEN
-            if len(value) > limit:
-                return await retry(f"Задовго ({len(value)} символів, максимум {limit}).")
-            await db.update_need(need.id, field, message.html_text)
+        elif field == "description":
+            if len(value) > DESCRIPTION_MAX_LEN:
+                return await retry(f"Задовго ({len(value)} символів, максимум {DESCRIPTION_MAX_LEN}).")
+            await db.update_need(need.id, "description", message.html_text)
         elif field == "responsible":
             username = parse_username(value)
             if not username:

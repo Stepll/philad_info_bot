@@ -6,7 +6,7 @@ from bot.db import Database
 from bot.keyboards import MENU_BUTTONS, main_menu_kb, url_button_kb
 from bot.render import send_schedule, send_section
 from bot.sections import SECTIONS
-from bot.settings import MEET_FORM_URL, SECTION_URL_BUTTONS, SECTION_URL_KEYS
+from bot.settings import LINK_SECTIONS, SECTION_URL_BUTTONS, SECTION_URL_KEYS
 
 router = Router(name="user")
 router.message.filter(F.chat.type == "private")
@@ -17,13 +17,19 @@ async def cmd_start(message: Message, db: Database) -> None:
     await send_section(message.bot, message.chat.id, db, "welcome", main_menu_kb())
 
 
-@router.message(F.text == SECTIONS["meet"].title)
-async def on_meet(message: Message, db: Database) -> None:
-    url = await db.get_setting(MEET_FORM_URL)
+# Лише кнопка-посилання («Давай знайомитись», «Потреби»)
+LINK_SECTION_TITLES = {SECTIONS[key].title: key for key in LINK_SECTIONS}
+
+
+@router.message(F.text.in_(LINK_SECTION_TITLES))
+async def on_link_section(message: Message, db: Database) -> None:
+    key = LINK_SECTION_TITLES[message.text]
+    text, button, missing = LINK_SECTIONS[key]
+    url = await db.get_setting(SECTION_URL_KEYS[key])
     if url:
-        await message.answer("Давайте знайомитись! 👇", reply_markup=url_button_kb("📝 Заповнити анкету", url))
+        await message.answer(text, reply_markup=url_button_kb(button, url))
     else:
-        await message.answer("Анкета незабаром з'явиться 🙏", reply_markup=main_menu_kb())
+        await message.answer(missing, reply_markup=main_menu_kb())
 
 
 @router.message(F.text == SECTIONS["schedule"].title)

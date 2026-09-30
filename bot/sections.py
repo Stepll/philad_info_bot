@@ -28,9 +28,10 @@ SECTIONS: dict[str, Section] = {
         Section("serving", "🙌 Потреба в служінні", ""),
         Section("donations", "💛 Пожертвування", _PLACEHOLDER),
         Section("socials", "🌐 Соцмережі", _PLACEHOLDER),
+        Section("needs", "🙏 Потреби", ""),
         Section("meet", "🤝 Давай знайомитись", ""),
     )
 }
 
 # Кнопки головного меню (welcome показується на /start, а не як кнопка)
-MENU_SECTIONS = ["events", "homegroups", "schedule", "serving", "donations", "socials", "meet"]
+MENU_SECTIONS = ["events", "homegroups", "schedule", "serving", "donations", "socials", "needs", "meet"]

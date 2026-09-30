@@ -4,7 +4,6 @@ import re
 from dataclasses import dataclass
 
 TITLE_MAX_LEN = 40  # назва — це ще й текст кнопки
-SUMMARY_MAX_LEN = 150
 DESCRIPTION_MAX_LEN = 3000
 
 
@@ -12,8 +11,8 @@ DESCRIPTION_MAX_LEN = 3000
 class Need:
     id: int
     title: str
-    summary: str  # HTML, рядок у загальному списку
-    description: str  # HTML, повний опис
+    summary: str  # більше не показується (колишній рядок у загальному списку)
+    description: str  # HTML
     responsible: str | None  # @username без «@»
 
 
