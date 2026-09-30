@@ -49,13 +49,21 @@ def event_kb(
         kb.button(text="🔗 Детальніше", url=event.url)
         sizes.append(1)
 
-    label = "✅ У календарі" if in_calendar else "📅 Додати в календар"
     if config.public_url and message_id:
-        # Одразу на сторінку події; відмітку «✅» ставить сервер, коли сторінку відкрито
-        kb.button(text=label, url=carousel_calendar_url(config, event.id, chat_id, message_id))
+        # Google — пряме посилання: так Android одразу відкриває застосунок Google Calendar
+        # (через редирект нашого сервера він лишався в браузері й вів на сторінку Workspace).
+        # Тому натискання Google бот не бачить, і «✅» ставиться лише на кнопці iPhone —
+        # її сторінку відкриває наш сервер (див. mark_opened).
+        kb.button(text="📆 Google Календар", url=google_calendar_url(event))
+        kb.button(
+            text="✅ iPhone Календар" if in_calendar else "🍏 iPhone Календар",
+            url=carousel_calendar_url(config, event.id, chat_id, message_id),
+        )
+        sizes.append(2)
     else:
+        label = "✅ У календарі" if in_calendar else "📅 Додати в календар"
         kb.button(text=label, callback_data=EventNav(action="cal", event=event.id))
-    sizes.append(1)
+        sizes.append(1)
     # Гортання — в самому низу
     if len(events) > 1:
         prev_id = events[index - 1].id
