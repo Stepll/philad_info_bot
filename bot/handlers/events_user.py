@@ -59,7 +59,7 @@ def event_kb(
             text="✅ iPhone Календар" if in_calendar else "🍏 iPhone Календар",
             url=carousel_calendar_url(config, event.id, chat_id, message_id),
         )
-        sizes.append(2)
+        sizes += [1, 1]
     else:
         label = "✅ У календарі" if in_calendar else "📅 Додати в календар"
         kb.button(text=label, callback_data=EventNav(action="cal", event=event.id))
