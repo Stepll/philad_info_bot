@@ -5,6 +5,7 @@ from pathlib import Path
 import aiosqlite
 
 from bot.events import Event
+from bot.homegroups import HomeGroup
 from bot.schedule import SEED, ScheduleItem
 from bot.serving import Need
 from bot.sections import SECTIONS
@@ -60,6 +61,12 @@ CREATE TABLE IF NOT EXISTS serving_needs (
     description TEXT NOT NULL DEFAULT '',
     responsible TEXT
 );
+CREATE TABLE IF NOT EXISTS home_groups (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    photo_id TEXT NOT NULL,
+    text     TEXT NOT NULL DEFAULT '',
+    leader   TEXT
+);
 CREATE TABLE IF NOT EXISTS serving_responses (
     user_id    INTEGER NOT NULL,
     need_id    INTEGER NOT NULL,
@@ -69,6 +76,8 @@ CREATE TABLE IF NOT EXISTS serving_responses (
 """
 
 _EVENT_COLUMNS = {"poster_id", "text", "date", "time", "place", "url"}
+_GROUP_COLUMNS = {"photo_id", "text", "leader"}
+_GROUP_SELECT = "SELECT id, photo_id, text, leader FROM home_groups"
 _NEED_COLUMNS = {"title", "summary", "description", "responsible"}
 _NEED_SELECT = "SELECT id, title, summary, description, responsible FROM serving_needs"
 _EVENT_SELECT = "SELECT id, poster_id, text, date, time, place, url FROM events"
@@ -274,6 +283,37 @@ class Database:
             )
             row = await cur.fetchone()
         return row[0] if row else None
+
+    # --- Домашні групи ---
+
+    async def list_groups(self) -> list[HomeGroup]:
+        async with aiosqlite.connect(self.path) as db:
+            cur = await db.execute(f"{_GROUP_SELECT} ORDER BY id")
+            return [HomeGroup(*row) for row in await cur.fetchall()]
+
+    async def get_group(self, group_id: int) -> HomeGroup | None:
+        async with aiosqlite.connect(self.path) as db:
+            cur = await db.execute(f"{_GROUP_SELECT} WHERE id = ?", (group_id,))
+            row = await cur.fetchone()
+        return HomeGroup(*row) if row else None
+
+    async def add_group(self, photo_id: str) -> int:
+        async with aiosqlite.connect(self.path) as db:
+            cur = await db.execute("INSERT INTO home_groups (photo_id) VALUES (?)", (photo_id,))
+            await db.commit()
+            return cur.lastrowid
+
+    async def update_group(self, group_id: int, column: str, value: str | None) -> None:
+        if column not in _GROUP_COLUMNS:
+            raise ValueError(column)
+        async with aiosqlite.connect(self.path) as db:
+            await db.execute(f"UPDATE home_groups SET {column} = ? WHERE id = ?", (value, group_id))
+            await db.commit()
+
+    async def delete_group(self, group_id: int) -> None:
+        async with aiosqlite.connect(self.path) as db:
+            await db.execute("DELETE FROM home_groups WHERE id = ?", (group_id,))
+            await db.commit()
 
     # --- Потреба в служінні ---
 

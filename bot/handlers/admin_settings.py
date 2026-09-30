@@ -10,7 +10,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.db import Database
-from bot.handlers.admin_common import EventCb, ScheduleCb, ServingCb, SettingsCb, edit_screen, is_valid_url, prompts
+from bot.handlers.admin_common import EventCb, HomeGroupCb, ScheduleCb, ServingCb, SettingsCb, edit_screen, is_valid_url, prompts
 from bot.render import CAPTION_LIMIT
 from bot.sections import MENU_SECTIONS, SECTIONS
 from bot.settings import SECTION_FIELDS, SECTION_URL_KEYS
@@ -97,6 +97,12 @@ async def _section_screen(db: Database, key: str, note: str = "") -> tuple[str, 
 
     if not fields:
         lines.append("Налаштувань для цього розділу поки немає.")
+
+    if key == "homegroups":
+        groups = await db.list_groups()
+        lines.append(f"👥 <b>Сторінки груп</b> (кнопка «Вибрати домашку»): {len(groups) or '<i>немає</i>'}")
+        kb.button(text="👥 Список груп", callback_data=HomeGroupCb(action="list"))
+        sizes.append(1)
 
     kb.button(text="⬅️ Назад", callback_data=SettingsCb(action="list"))
     kb.adjust(*sizes, 1)

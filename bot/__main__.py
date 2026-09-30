@@ -12,10 +12,12 @@ from bot.db import Database
 from bot.handlers import (
     admin,
     admin_events,
+    admin_homegroups,
     admin_schedule,
     admin_serving,
     admin_settings,
     events_user,
+    homegroups_user,
     serving_user,
     user,
 )
@@ -56,8 +58,10 @@ async def main() -> None:
         admin_schedule.create_router(config.admin_chat_id),
         admin_events.create_router(config.admin_chat_id),
         admin_serving.create_router(config.admin_chat_id),
+        admin_homegroups.create_router(config.admin_chat_id),
         events_user.router,
         serving_user.router,
+        homegroups_user.router,
         user.router,
     )
 
